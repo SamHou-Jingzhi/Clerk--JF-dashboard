@@ -1,0 +1,1661 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clerk ME 夹治具及备品状态追踪 Dashboard</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .sidebar-link {
+            outline: none !important;
+            -webkit-tap-highlight-color: transparent;
+            position: relative;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .sidebar-link:focus,
+        .sidebar-link:focus-visible {
+            outline: none !important;
+            box-shadow: none !important;
+        }
+        .sidebar-link.active {
+            background: linear-gradient(90deg, rgba(37, 99, 235, 0.18) 0%, rgba(30, 41, 59, 0.7) 100%) !important;
+            border-left: 3px solid #3b82f6 !important;
+            color: #ffffff !important;
+            box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.05), inset 0 0 12px rgba(37, 99, 235, 0.1);
+        }
+        .sidebar-link.active i {
+            color: #60a5fa !important;
+        }
+        .sidebar-link:not(.active):hover {
+            background-color: rgba(30, 41, 59, 0.7);
+            color: #f1f5f9;
+        }
+        .sidebar-link:not(.active):hover i {
+            color: #94a3b8;
+        }
+        .stock-alert-row {
+            background-color: #fff1f2 !important;
+            border-left: 4px solid #f43f5e;
+        }
+        .stock-alert-row:hover {
+            background-color: #ffe4e6 !important;
+        }
+        select option {
+            background-color: #ffffff;
+            color: #1e293b;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 font-sans text-slate-800 antialiased">
+
+    <div class="flex h-screen overflow-hidden">
+        <!-- 侧边导航栏 -->
+        <aside class="w-64 bg-slate-900 text-slate-300 flex flex-col justify-between shadow-xl flex-shrink-0">
+            <div>
+                <div class="p-6 border-b border-slate-800 flex items-center gap-3">
+                    <i class="fa-solid fa-wrench text-blue-500 text-2xl"></i>
+                    <div>
+                        <h1 class="font-bold text-white text-lg tracking-wide">Clerk Project</h1>
+                        <p class="text-xs text-slate-400">ME J&F Status Hub</p>
+                    </div>
+                </div>
+
+                <nav class="mt-6 px-3 space-y-1.5">
+                    <button onclick="switchTab('fixture')" id="tab-btn-fixture" class="sidebar-link active w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium focus:outline-none focus:ring-0">
+                        <i class="fa-solid fa-layer-group w-5 transition-colors text-blue-400"></i>
+                        <span>Fixture Status (治具与验证)</span>
+                    </button>
+                    <button onclick="switchTab('spare')" id="tab-btn-spare" class="sidebar-link w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-slate-400 focus:outline-none focus:ring-0">
+                        <i class="fa-solid fa-boxes-packing w-5 transition-colors text-slate-500"></i>
+                        <span>J&F Spare Parts (备品耗材)</span>
+                    </button>
+                </nav>
+            </div>
+
+            <div class="p-4 border-t border-slate-800 text-xs text-slate-500 flex flex-col gap-1.5">
+                <div class="flex items-center justify-between">
+                    <span>ME DRI: On-duty</span>
+                    <span id="sync-status-indicator" class="inline-flex items-center gap-1.5 text-emerald-400 font-semibold">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Sheet 数据已装载
+                    </span>
+                </div>
+                <div class="text-[10px] text-slate-400 truncate">Doc: Clerk MP J&F Tracker (gid: 315805591)</div>
+            </div>
+        </aside>
+
+        <main class="flex-1 flex flex-col overflow-y-auto">
+            <!-- 顶部控制栏 -->
+            <header class="bg-white border-b border-slate-200 px-8 py-3.5 flex flex-wrap items-center justify-between gap-4 sticky top-0 z-20 shadow-sm">
+                <div>
+                    <div class="flex items-center gap-2.5">
+                        <h2 id="page-title" class="text-lg font-bold text-slate-900">Fixture 到货与 Qualification 验证追踪</h2>
+                        <span id="header-data-badge" class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <i class="fa-solid fa-circle-check text-[10px]"></i>
+                            <span id="header-badge-text">已加载 30 款治具共 414 台真实机台数据</span>
+                        </span>
+                    </div>
+                    <p class="text-xs text-slate-500 mt-0.5">
+                        数据源：Google Sheet (ID: <code class="bg-slate-100 px-1 py-0.5 rounded text-slate-700">1EEqzm-W7e2H-w2YqUZg0fthepmeJIyV_cP1zpKE-hSQ</code> | Fixture SN: <code class="bg-slate-100 px-1 py-0.5 rounded text-slate-700">315805591</code>)
+                    </p>
+                </div>
+
+                <div class="flex items-center gap-2.5">
+                    <!-- 实时同步状态与手动触发按钮 -->
+                    <button onclick="fetchLiveSheetData(true)" id="btn-manual-sync" class="text-xs bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-medium px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition shadow-2xs">
+                        <i class="fa-solid fa-rotate text-blue-600" id="sync-icon"></i>
+                        <span>立即同步 Sheet</span>
+                    </button>
+                    <!-- 配置 Apps Script API URL 按钮 -->
+                    <button onclick="openApiConfigModal()" class="text-xs bg-slate-900 hover:bg-slate-800 text-white font-medium px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition shadow-2xs">
+                        <i class="fa-solid fa-cloud-arrow-down text-emerald-400"></i>
+                        <span>配置自动接口</span>
+                    </button>
+                </div>
+            </header>
+
+            <!-- ================= PAGE 1: FIXTURE TRACKER ================= -->
+            <section id="page-fixture" class="p-8 space-y-6">
+
+                <!-- 1. 四大核心总结指标模块 -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                    <div class="bg-white p-5 rounded-xl border border-slate-200/90 shadow-sm flex justify-between items-start">
+                        <div>
+                            <p class="text-xs font-bold uppercase text-slate-400 tracking-wider">需求总数 (Total Demand)</p>
+                            <h3 id="kpi-fix-demand" class="text-3xl font-extrabold text-slate-900 mt-2">--</h3>
+                            <p class="text-xs text-slate-500 mt-2" id="kpi-fix-demand-sub">统计 30 款治具规划总量</p>
+                        </div>
+                        <div class="p-3 bg-blue-50 text-blue-600 rounded-lg"><i class="fa-solid fa-list-check text-xl"></i></div>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-xl border border-slate-200/90 shadow-sm flex justify-between items-start">
+                        <div>
+                            <p class="text-xs font-bold uppercase text-slate-400 tracking-wider">到货总数 (On Hand)</p>
+                            <h3 id="kpi-fix-onhand" class="text-3xl font-extrabold text-blue-600 mt-2">--</h3>
+                            <p class="text-xs text-emerald-600 font-medium mt-2" id="kpi-fix-onhand-rate">到货率 --%</p>
+                        </div>
+                        <div class="p-3 bg-emerald-50 text-emerald-600 rounded-lg"><i class="fa-solid fa-truck-ramp-box text-xl"></i></div>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-xl border border-slate-200/90 shadow-sm flex justify-between items-start">
+                        <div>
+                            <p class="text-xs font-bold uppercase text-slate-400 tracking-wider">过了 IQC 总数 (IQC OK)</p>
+                            <h3 id="kpi-fix-iqc" class="text-3xl font-extrabold text-amber-600 mt-2">--</h3>
+                            <p class="text-xs text-amber-600 font-medium mt-2" id="kpi-fix-iqc-rate">IQC通过率 --%</p>
+                        </div>
+                        <div class="p-3 bg-amber-50 text-amber-600 rounded-lg"><i class="fa-solid fa-clipboard-check text-xl"></i></div>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-xl border border-slate-200/90 shadow-sm flex justify-between items-start">
+                        <div>
+                            <p class="text-xs font-bold uppercase text-slate-400 tracking-wider">验证完成总数 (Validated)</p>
+                            <h3 id="kpi-fix-passed" class="text-3xl font-extrabold text-emerald-600 mt-2">--</h3>
+                            <p class="text-xs text-indigo-600 font-medium mt-2" id="kpi-fix-pass-rate">验证完成率 --%</p>
+                        </div>
+                        <div class="p-3 bg-indigo-50 text-indigo-600 rounded-lg"><i class="fa-solid fa-circle-check text-xl"></i></div>
+                    </div>
+                </div>
+
+                <!-- Summary 综合汇总图表模块 -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm lg:col-span-2 flex flex-col justify-between">
+                        <div>
+                            <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+                                <div>
+                                    <h4 class="text-base font-bold text-slate-900" id="chart-compare-title">
+                                        <i class="fa-solid fa-chart-column text-blue-600 mr-1.5"></i> 治具款数综合汇总 (Fixture Summary)
+                                    </h4>
+                                    <p class="text-xs text-slate-500 mt-0.5">统计治具总款数、三大类分别款数、已到齐款数、已IQC检完款数、已验证完款数</p>
+                                </div>
+                                <span class="text-xs px-2.5 py-1 bg-slate-100 text-slate-700 font-bold rounded-lg border border-slate-200">
+                                    统计口径：按治具款数 (Models)
+                                </span>
+                            </div>
+
+                            <!-- 关键款数指标小卡片网格 -->
+                            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5 mb-4 text-center">
+                                <div class="bg-slate-50 border border-slate-200 rounded-lg p-2.5">
+                                    <span class="block text-[11px] text-slate-500 font-medium">治具总款数</span>
+                                    <span id="sum-total-types" class="text-xl font-extrabold text-slate-800">30</span>
+                                    <span class="block text-[10px] text-slate-400">全部款数</span>
+                                </div>
+                                <div class="bg-blue-50/70 border border-blue-200 rounded-lg p-2.5">
+                                    <span class="block text-[11px] text-blue-700 font-semibold">CAL 校验类</span>
+                                    <span id="sum-cal-types" class="text-xl font-extrabold text-blue-700">21</span>
+                                    <span class="block text-[10px] text-blue-500">款数</span>
+                                </div>
+                                <div class="bg-amber-50/70 border border-amber-200 rounded-lg p-2.5">
+                                    <span class="block text-[11px] text-amber-700 font-semibold">ATA 工装类</span>
+                                    <span id="sum-ata-types" class="text-xl font-extrabold text-amber-700">5</span>
+                                    <span class="block text-[10px] text-amber-500">款数</span>
+                                </div>
+                                <div class="bg-emerald-50/70 border border-emerald-200 rounded-lg p-2.5">
+                                    <span class="block text-[11px] text-emerald-700 font-semibold">ASM 组装类</span>
+                                    <span id="sum-asm-types" class="text-xl font-extrabold text-emerald-700">4</span>
+                                    <span class="block text-[10px] text-emerald-500">款数</span>
+                                </div>
+                                <div class="bg-indigo-50/70 border border-indigo-200 rounded-lg p-2.5">
+                                    <span class="block text-[11px] text-indigo-700 font-semibold">已到齐款数</span>
+                                    <span id="sum-arrived-all-types" class="text-xl font-extrabold text-indigo-700">--</span>
+                                    <span class="block text-[10px] text-indigo-500">在手 ≥ 需求</span>
+                                </div>
+                                <div class="bg-teal-50/70 border border-teal-200 rounded-lg p-2.5">
+                                    <span class="block text-[11px] text-teal-700 font-semibold">已验证完款数</span>
+                                    <span id="sum-passed-all-types" class="text-xl font-extrabold text-teal-700">--</span>
+                                    <span class="block text-[10px] text-teal-500">验证 ≥ 在手</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 汇总图表区域 -->
+                        <div class="h-60 relative w-full">
+                            <canvas id="fixtureCompareChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- 重点项目 Highlight 模块 -->
+                    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                        <div>
+                            <div class="flex items-center justify-between mb-1">
+                                <h4 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                                    <i class="fa-solid fa-triangle-exclamation text-amber-500"></i>
+                                    重点项目 Highlight
+                                </h4>
+                                <span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                                    5 项重点跟进
+                                </span>
+                            </div>
+                            <p class="text-xs text-slate-500 mb-3">现场验证异常、等效性待复测及待连线关键治具 (点击快速穿透)</p>
+                        </div>
+
+                        <!-- 重点项目列表容器 -->
+                        <div class="space-y-2.5 overflow-y-auto max-h-[250px] pr-1 text-xs" id="highlight-items-container">
+                            <!-- 动态注入重点项目卡片 -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. 明细追踪表格模块 -->
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="p-5 border-b border-slate-200 flex items-center justify-between gap-4">
+                        <div class="flex items-center gap-3 min-w-0 flex-1">
+                            <h4 id="fixture-table-main-title" class="font-bold text-slate-900 truncate">全部治具明细追踪清单</h4>
+                            <span id="fixture-table-count" class="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-1 rounded-full font-bold whitespace-nowrap shrink-0">
+                                共 30 款治具
+                            </span>
+                        </div>
+                        
+                        <!-- 表格头部治具选择器：牢固固定在右上方，禁止换行与位移 -->
+                        <div class="flex items-center gap-2 bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-xs shadow-sm shrink-0">
+                            <i class="fa-solid fa-list-check text-blue-600"></i>
+                            <label for="table-fixture-filter" class="text-slate-600 font-semibold whitespace-nowrap">选择治具视图:</label>
+                            <select id="table-fixture-filter" onchange="onTableFixtureSelectChange()" class="bg-transparent border-none text-slate-800 font-bold focus:outline-none cursor-pointer w-52 sm:w-64 md:w-72 truncate">
+                                <option value="ALL">所有治具 (All Fixtures 汇总)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm text-slate-600">
+                            <thead id="fixture-table-thead" class="bg-slate-50 text-xs uppercase text-slate-500 font-semibold border-b border-slate-200">
+                                <!-- 动态注入表头 -->
+                            </thead>
+                            <tbody id="fixture-table-body" class="divide-y divide-slate-200">
+                                <!-- 动态注入数据行 -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ================= PAGE 2: J&F SPARE PARTS ================= -->
+            <section id="page-spare" class="p-8 space-y-6 hidden">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex justify-between items-start">
+                        <div>
+                            <p class="text-xs font-semibold uppercase text-slate-400 tracking-wider">备品品类数 (Total SKUs)</p>
+                            <h3 id="kpi-spare-skus" class="text-3xl font-bold text-slate-900 mt-2">--</h3>
+                            <p class="text-xs text-slate-500 mt-2">J&F Consign Parts & Equipment</p>
+                        </div>
+                        <div class="p-3 bg-blue-50 text-blue-600 rounded-lg"><i class="fa-solid fa-boxes-stacked text-xl"></i></div>
+                    </div>
+
+                    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex justify-between items-start">
+                        <div>
+                            <p class="text-xs font-semibold uppercase text-slate-400 tracking-wider">低于安全库存项 (Stock Alert)</p>
+                            <h3 id="kpi-spare-warning" class="text-3xl font-bold text-rose-600 mt-2">--</h3>
+                            <p class="text-xs text-rose-500 mt-2">需立即安排 PO 补货</p>
+                        </div>
+                        <div class="p-3 bg-rose-50 text-rose-600 rounded-lg"><i class="fa-solid fa-triangle-exclamation text-xl"></i></div>
+                    </div>
+
+                    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex justify-between items-start">
+                        <div>
+                            <p class="text-xs font-semibold uppercase text-slate-400 tracking-wider">当前在手库存总量 (On Hand Total)</p>
+                            <h3 id="kpi-spare-onhand-total" class="text-3xl font-bold text-emerald-600 mt-2">--</h3>
+                            <p class="text-xs text-slate-500 mt-2">包含 BYD / CPT 现场在库</p>
+                        </div>
+                        <div class="p-3 bg-emerald-50 text-emerald-600 rounded-lg"><i class="fa-solid fa-warehouse text-xl"></i></div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                        <h4 class="text-base font-bold text-slate-800 mb-4">重点备品在手库存 vs 安全库存</h4>
+                        <div class="h-64"><canvas id="spareStockCompareChart"></canvas></div>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                        <h4 class="text-base font-bold text-slate-800 mb-4">备品供应商分布 (Vendor Distribution)</h4>
+                        <div class="h-64 flex items-center justify-center"><canvas id="spareVendorChart"></canvas></div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="p-5 border-b border-slate-200 flex flex-wrap justify-between items-center gap-3">
+                        <div class="flex items-center gap-3">
+                            <h4 class="font-bold text-slate-800">备品耗材安全库存状态表</h4>
+                            <span class="text-xs text-rose-600 font-semibold bg-rose-50 px-2.5 py-1 rounded border border-rose-200">
+                                红色高亮项表示低于安全库存
+                            </span>
+                        </div>
+                        
+                        <div class="flex items-center gap-2">
+                            <button onclick="openSpareImportModal()" class="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 shadow-sm">
+                                <i class="fa-solid fa-file-import"></i> 📋 粘贴导入 Sheet 备品数据
+                            </button>
+                            <button onclick="toggleSpareFilter(false)" id="filter-spare-all" class="text-xs bg-slate-900 text-white px-3 py-1.5 rounded-lg font-medium transition">
+                                显示全部
+                            </button>
+                            <button onclick="toggleSpareFilter(true)" id="filter-spare-alert" class="text-xs bg-slate-100 text-slate-700 hover:bg-slate-200 px-3 py-1.5 rounded-lg border border-slate-300 font-medium transition flex items-center gap-1.5">
+                                <span class="w-2 h-2 rounded-full bg-rose-500"></span> 仅看低于安全库存 (<span id="alert-btn-count">0</span>)
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm text-slate-600">
+                            <thead class="bg-slate-50 text-xs uppercase text-slate-500 font-semibold border-b border-slate-200">
+                                <tr>
+                                    <th class="px-6 py-4">备品名称 (Consign Parts)</th>
+                                    <th class="px-6 py-4">供应商 (Vendor)</th>
+                                    <th class="px-6 py-4">规格型号 (Model)</th>
+                                    <th class="px-6 py-4">料号 (PN)</th>
+                                    <th class="px-6 py-4">安全库存水位</th>
+                                    <th class="px-6 py-4">当前在手库存</th>
+                                    <th class="px-6 py-4">库存状态健康度</th>
+                                    <th class="px-6 py-4">收货/存储库位</th>
+                                </tr>
+                            </thead>
+                            <tbody id="spare-table-body" class="divide-y divide-slate-200">
+                                <!-- 动态注入数据行 -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- 弹窗 1：配置 Google Sheet Apps Script API URL -->
+    <div id="api-config-modal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 space-y-4 border border-slate-200">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div class="flex items-center gap-2 text-slate-900 font-bold text-base">
+                    <i class="fa-solid fa-cloud-bolt text-blue-600"></i>
+                    <span>配置 Google Sheet 实时同步接口 (API)</span>
+                </div>
+                <button onclick="closeApiConfigModal()" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <p class="text-xs text-slate-500 leading-relaxed">
+                按照《实操指南》在 Google Sheet 的 <strong>Apps Script</strong> 中发布 Web 应用后，将生成的 URL 粘贴至下方。网页将<strong>全自动定时拉取</strong>表格最新机台与备品变动：
+            </p>
+            <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1.5">Apps Script Web App 链接 (URL):</label>
+                <input id="api-url-input" type="url" placeholder="https://script.google.com/macros/s/AKfycbx.../exec" class="w-full text-xs font-mono p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-slate-50 text-slate-800">
+            </div>
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-[11px] text-blue-800 space-y-1">
+                <div class="font-bold flex items-center gap-1.5"><i class="fa-solid fa-circle-info"></i> 说明：</div>
+                <div>• 配置后将自动保存在浏览器中，每 60 秒静默轮询一次最新数据。</div>
+                <div>• 若未配置或网络离线，系统始终以代码内嵌的 414 台权威数据完整展示。</div>
+            </div>
+            <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button onclick="closeApiConfigModal()" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition">取消</button>
+                <button onclick="saveAndApplyApiUrl()" class="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition shadow-sm flex items-center gap-1.5">
+                    <i class="fa-solid fa-check"></i> 保存并立即拉取
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 弹窗 2：备品耗材数据粘贴导入模态框 -->
+    <div id="spare-import-modal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-6 space-y-4 border border-slate-200">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div class="flex items-center gap-2 text-slate-900 font-bold text-base">
+                    <i class="fa-solid fa-boxes-packing text-blue-600"></i>
+                    <span>导入 Google Sheet「J&F spare parts」真实数据</span>
+                </div>
+                <button onclick="closeSpareImportModal()" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <p class="text-xs text-slate-500 leading-relaxed">
+                在 Google Sheet 的 <code class="bg-slate-100 px-1 py-0.5 rounded text-blue-600 font-mono">J&F spare parts</code> 分页中，框选包含表头的数据区域，按 <kbd class="px-1.5 py-0.5 bg-slate-100 border border-slate-300 rounded text-[11px]">Ctrl+C</kbd> 复制，并在此处按 <kbd class="px-1.5 py-0.5 bg-slate-100 border border-slate-300 rounded text-[11px]">Ctrl+V</kbd> 粘贴即可：
+            </p>
+            <textarea id="spare-paste-input" rows="8" placeholder="在此粘贴表格内容（支持直接粘贴整张表格或带Tab分隔符的数据）..." class="w-full text-xs font-mono p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-slate-50 text-slate-800"></textarea>
+            <div class="flex items-center justify-between pt-2">
+                <span class="text-[11px] text-slate-400">支持自动识别 Consign Parts、Vendor、Model、PN、Safety Stock、On hand 等字段</span>
+                <div class="flex gap-2">
+                    <button onclick="closeSpareImportModal()" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition">取消</button>
+                    <button onclick="parseAndApplySpareData()" class="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition shadow-sm flex items-center gap-1.5">
+                        <i class="fa-solid fa-check"></i> 解析并立即生效
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 顶部状态提示 Toast -->
+    <div id="toast-notification" class="fixed bottom-6 right-6 z-50 transform transition-all duration-300 translate-y-20 opacity-0 pointer-events-none">
+        <div id="toast-box" class="bg-slate-900 text-white px-4 py-3 rounded-xl shadow-xl flex items-center gap-3 border border-slate-700 text-sm">
+            <i id="toast-icon" class="fa-solid fa-circle-check text-emerald-400 text-base"></i>
+            <span id="toast-message">操作完成</span>
+        </div>
+    </div>
+
+    <script>
+        // ==================== 1. GOOGLE SHEET 实时同步接口配置 ====================
+        let LIVE_API_URL = "https://script.google.com/macros/s/AKfycbx_YOUR_DEPLOYMENT_ID/exec";
+
+        // 尝试从本地存储载入用户保存的 URL
+        try {
+            const savedUrl = localStorage.getItem("CLERK_SHEET_API_URL");
+            if (savedUrl && savedUrl.trim().startsWith("http")) {
+                LIVE_API_URL = savedUrl.trim();
+            }
+        } catch(e) {
+            console.log("Local storage not accessible in sandbox", e);
+        }
+
+        // ==================== 2. 原始 GOOGLE SHEET 30 款治具核心定义 ====================
+        const RAW_SHEET_FIXTURES = [
+            { no: 1, name: "Clerk Fasten BP latch Fixture", category: "ATA", vendor: "HCD", owner: "Owen Yang", target: 3 },
+            { no: 2, name: "Clerk Motor to Top Plate Assembly Fixture", category: "ATA", vendor: "HCD", owner: "Jun Deng", target: 3 },
+            { no: 3, name: "Clerk Tower to Top Plate Assembly Fixture", category: "ASM", vendor: "CPT", owner: "Jun Deng", target: 6 },
+            { no: 4, name: "Clerk UI Pressing Fixture", category: "ASM", vendor: "HCD", owner: "Owen Yang", target: 3 },
+            { no: 5, name: "Clerk Paste and Press Heatsink Fixture", category: "ATA", vendor: "HCD", owner: "Yunze Li", target: 2 },
+            { no: 6, name: "Clerk IRR Gantry Fixture", category: "CAL", vendor: "HCD", owner: "Yunze Li", target: 19 },
+            { no: 7, name: "Clerk IRR GANTRY Adapter-BLU", category: "CAL", vendor: "HCD", owner: "Yunze Li", target: 9 },
+            { no: 8, name: "Clerk Tank Latch Assembly Fixture", category: "ATA", vendor: "CPT", owner: "Jacob Li", target: 3 },
+            { no: 9, name: "Clerk Dual Rails to Tower Assembly Fixture", category: "ASM", vendor: "HCD", owner: "Owen Yang", target: 6 },
+            { no: 10, name: "Clerk Z Rail Parallelism Check Jig", category: "CAL", vendor: "BYD", owner: "Sam Hou", target: 2 },
+            { no: 11, name: "Clerk Z Tram Check Gauge", category: "CAL", vendor: "HCD", owner: "Owen Yang", target: 9 },
+            { no: 12, name: "Clerk Z Tram Check Square", category: "CAL", vendor: "HCD", owner: "Owen Yang", target: 9 },
+            { no: 13, name: "Clerk Z Tram Check Base", category: "CAL", vendor: "HCD", owner: "Owen Yang", target: 9 },
+            { no: 14, name: "Clerk Cal 1 Base", category: "CAL", vendor: "FL / BYD", owner: "Owen Yang", target: 16 },
+            { no: 15, name: "Clerk Z Force Check Jig and Adapter", category: "CAL", vendor: "CPT", owner: "Owen Yang", target: 20 },
+            { no: 16, name: "Clerk Z Sweep Weight Gauge", category: "CAL", vendor: "CPT", owner: "Owen Yang", target: 20 },
+            { no: 17, name: "Clerk CARTRIDGE SIGNED RFID CHECK Jig", category: "CAL", vendor: "FL", owner: "Zhizhou Wei", target: 12 },
+            { no: 18, name: "Clerk Dispense Motor Check Jig", category: "CAL", vendor: "HCD", owner: "Zhizhou Wei", target: 12 },
+            { no: 19, name: "Clerk UV cover", category: "CAL", vendor: "CPT", owner: "Yunze Li", target: 26 },
+            { no: 20, name: "Clerk REPRESENTATIVE TANK FIXTURE", category: "CAL", vendor: "FL", owner: "Tony Wu", target: 26 },
+            { no: 21, name: "Clerk Accelerometer and Levelness Fixture", category: "CAL", vendor: "CPT", owner: "Justin Feng", target: 26 },
+            { no: 22, name: "Clerk 6mm Sanic Check Jig", category: "CAL", vendor: "CPT", owner: "Tony Wu", target: 26 },
+            { no: 23, name: "Clerk 15mm Sanic Check Jig", category: "CAL", vendor: "CPT", owner: "Tony Wu", target: 26 },
+            { no: 24, name: "Clerk Parallelism Setting Shim", category: "CAL", vendor: "BYD", owner: "Sam Hou", target: 30 },
+            { no: 25, name: "Clerk Calibration Reference BP", category: "CAL", vendor: "BYD", owner: "Sam Hou", target: 26 },
+            { no: 26, name: "Clerk Parallelism Check Gauge", category: "CAL", vendor: "BYD", owner: "Sam Hou", target: 27 },
+            { no: 27, name: "Clerk BLU Burn-in Rack", category: "CAL", vendor: "BYD", owner: "Alex Chen", target: 11 },
+            { no: 28, name: "Clerk Camera Check Jig", category: "CAL", vendor: "BYD", owner: "Justin Feng", target: 27 },
+            { no: 29, name: "Clerk Sanic and Camera Assembly Fixture", category: "ATA", vendor: "BYD", owner: "Jacob Li", target: 2 },
+            { no: 30, name: "Clerk BLU Diffuser Pasting Fixture-semi auto", category: "ASM", vendor: "BYD", owner: "Jun Deng", target: 2 }
+        ];
+
+        // 真实贴入的全部 414 台单机基线文本
+        const RAW_DATA_TEXT = `1	Clerk Fasten BP latch Fixture	ASM-124994-00||FU|2601|90000	ATA	BYD LINE	验证通过	Y	/
+1	Clerk Fasten BP latch Fixture	ASM-124994-00||FU|2606|90001	ATA	BYD LINE	验证通过	Y	/
+1	Clerk Fasten BP latch Fixture	ASM-124994-00||FU|2606|90002	ATA	BYD LINE	验证通过	Y	/
+2	Clerk Motor to Top Plate Assembly Fixture	ASM-124817-00|FU|2512|90000	ATA	BYD I LINE	验证通过	Y	/
+2	Clerk Motor to Top Plate Assembly Fixture	ASM-124817-00|FU|2606|90001	ATA	BYD LINE	验证通过	Y	/
+2	Clerk Motor to Top Plate Assembly Fixture	ASM-124817-00|FU|2606|90002	ATA	BYD LINE	验证通过	Y	/
+3	Clerk Tower to Top Plate Assembly Fixture	ASM-124817-00|VU|2512|90001	ASM	BYD LINE	验证通过	Y	/
+3	Clerk Tower to Top Plate Assembly Fixture	ASM-124817-00|VU|2512|90002	ASM	BYD I LINE	验证通过	Y	/
+3	Clerk Tower to Top Plate Assembly Fixture	ASM-124817-00|VU|2512|90003	ASM	BYD LINE	验证通过	Y	/
+3	Clerk Tower to Top Plate Assembly Fixture	ASM-124817-00|VU|2512|90004	ASM	BYD LINE	验证通过	Y	/
+3	Clerk Tower to Top Plate Assembly Fixture	ASM-124817-00|VU|2512|90005	ASM	BYD LINE	验证通过	Y	/
+3	Clerk Tower to Top Plate Assembly Fixture	ASM-124817-00|VU|2512|90006	ASM	BYD LINE	验证通过	Y	/
+4	Clerk UI Pressing Fixture	ASM-124838-00|FU|2512|90000	ASM	BYD LINE	验证通过	Y	/
+4	Clerk UI Pressing Fixture	ASM-124838-00|FU|2606|90001	ASM	BYD LINE	验证通过	Y	/
+4	Clerk UI Pressing Fixture	ASM-124838-00|FU|2606|90002	ASM	BYD LINE	验证通过	Y	/
+5	Clerk Paste and Press Heatsink Fixture	ASM-124767-00|FU|2512|90000	ATA	BYD LINE	验证通过	Y	/
+5	Clerk Paste and Press Heatsink Fixture	ASM-124767-00|FU|2606|90001	ATA	BYD LINE	验证中	/	/
+6	Clerk IRR Gantry Fixture	ASM-123886-00|FU|2602|90003	CAL	BYD I LINE	验证通过	Y	Y
+6	Clerk IRR Gantry Fixture	ASM-123886-00|FU|2602|90004	CAL	BYD LINE	验证通过	Y	Y
+6	Clerk IRR Gantry Fixture	ASM-123886-00|FU|2604|90005	CAL	BYD LINE	验证通过	Y	Y
+6	Clerk IRR Gantry Fixture	ASM-123886-00|FU|2512|90006	CAL	BYD LINE	验证通过	Y	Y
+6	Clerk IRR Gantry Fixture	ASM-123886-00|FU|2512|90007	CAL	BYD U LINE	验证通过	Y	Y
+6	Clerk IRR Gantry Fixture	ASM-123886-01|FU|2606|90008	CAL	BYD LINE	验证通过	Y	Y
+6	Clerk IRR Gantry Fixture	ASM-123886-01|FU|2606|90009	CAL	BYD LINE	验证通过	Y	Y
+6	Clerk IRR Gantry Fixture	ASM-123886-01|FU|2606|90010	CAL	BYD LINE	验证通过	Y	Y
+6	Clerk IRR Gantry Fixture	ASM-123886-01|FU|2606|90011	CAL	BYD I LINE	验证通过	Y	Y
+6	Clerk IRR Gantry Fixture	ASM-123886-01|FU|2606|90012	CAL	BYD LINE	验证通过	Y	Y
+6	Clerk IRR Gantry Fixture	ASM-123886-01|FU|2606|90013	CAL	BYD LINE	验证通过	Y	Y
+6	Clerk IRR Gantry Fixture	ASM-123886-01|FU|2606|90014	CAL	BYD U LINE	验证通过	Y	Y
+6	Clerk IRR Gantry Fixture	ASM-123886-01|FU|2606|90015	CAL	BYD LINE	验证通过	Y	Y
+6	Clerk IRR Gantry Fixture	ASM-123886-01|FU|2606|90016	CAL	BYD LINE	验证通过	Y	Y
+6	Clerk IRR Gantry Fixture	ASM-123886-01|FU|2606|90017	CAL	BYD LINE	验证通过	Y	Y
+6	Clerk IRR Gantry Fixture	ASM-123886-01|FU|2606|90018	CAL	BYD LINE	验证通过	Y	Y
+6	Clerk IRR Gantry Fixture	ASM-123886-01|FU|2606|90019	CAL	BYD LINE	验证通过	Y	Y
+6	Clerk IRR Gantry Fixture	ASM-123886-01|FU|2606|90020	CAL	BYD I LINE	验证通过	Y	Y
+6	Clerk IRR Gantry Fixture	ASM-123886-01|FU|2606|90021	CAL	BYD LINE	验证通过	Y	Y
+7	Clerk IRR GANTRY Adapter-BLU	ASM-123879-00|FU|2512|90000	CAL	BYD LINE	验证通过	Y	Y
+7	Clerk IRR GANTRY Adapter-BLU	ASM-123879-00|FU|2512|90001	CAL	BYD LINE	验证通过	Y	Y
+7	Clerk IRR GANTRY Adapter-BLU	ASM-123879-00|FU|2606|90003	CAL	BYD LINE	验证通过	Y	Y
+7	Clerk IRR GANTRY Adapter-BLU	ASM-123879-00|FU|2606|90004	CAL	BYD LINE	验证通过	Y	Y
+7	Clerk IRR GANTRY Adapter-BLU	ASM-123879-00|FU|2606|90005	CAL	BYD LINE	验证通过	Y	Y
+7	Clerk IRR GANTRY Adapter-BLU	ASM-123879-00|FU|2606|90006	CAL	BYD LINE	验证通过	Y	Y
+7	Clerk IRR GANTRY Adapter-BLU	ASM-123879-00|FU|2606|90007	CAL	BYD LINE	验证通过	Y	Y
+7	Clerk IRR GANTRY Adapter-BLU	ASM-123879-00|FU|2606|90008	CAL	BYD LINE	验证通过	Y	Y
+7	Clerk IRR GANTRY Adapter-BLU	ASM-123879-00|FU|2606|90009	CAL	BYD LINE	验证通过	Y	Y
+7	Clerk IRR GANTRY Adapter-BLU	ASM-123879-00|FU|2606|90010	CAL	BYD LINE	验证通过	Y	Y
+8	Clerk Tank Latch Assembly Fixture	ASM-124996-00|VU|2603|90000	ATA	BYD LINE	验证通过	Y	/
+8	Clerk Tank Latch Assembly Fixture	ASM-124996-00|VU|2606|90001	ATA	BYD LINE	验证通过	Y	/
+8	Clerk Tank Latch Assembly Fixture	ASM-124996-00|VU|2606|90002	ATA	BYD LINE	验证通过	Y	/
+9	Clerk Dual Rails to Tower Assembly Fixture	ASM-123874-00|FU|2510|90000	ASM	BYD LINE	验证通过	Y	/
+9	Clerk Dual Rails to Tower Assembly Fixture	ASM-123874-00|FU|2606|90001	ASM	BYD LINE	验证通过	Y	/
+9	Clerk Dual Rails to Tower Assembly Fixture	ASM-123874-00|FU|2606|90002	ASM	BYD LINE	验证通过	Y	/
+9	Clerk Dual Rails to Tower Assembly Fixture	ASM-123874-00|FU|2606|90003	ASM	BYD LINE	验证通过	Y	/
+9	Clerk Dual Rails to Tower Assembly Fixture	ASM-123874-00|FU|2606|90004	ASM	BYD LINE	验证通过	Y	/
+9	Clerk Dual Rails to Tower Assembly Fixture	ASM-123874-00|FU|2606|90005	ASM	BYD LINE	验证通过	Y	/
+10	Clerk Z Rail Parallelism Check Jig	ASM-123875-00|VU|2510|90000	CAL	BYD LINE	验证通过	Y	/
+10	Clerk Z Rail Parallelism Check Jig	ASM-123875-00|VU|2510|90002	CAL	BYD LINE	验证通过	Y	/
+11	Clerk Z Tram Check Gauge	ASM-123871-00|VU|2603|90002	CAL	BYD LINE	验证通过	Y	Y
+11	Clerk Z Tram Check Gauge	ASM-123871-00|VU|2603|90004	CAL	BYD I LINE	验证通过	Y	Golden
+11	Clerk Z Tram Check Gauge	ASM-123871-00|VU|2606|90005	CAL	BYD LINE	验证通过	Y	Y
+11	Clerk Z Tram Check Gauge	ASM-123871-00|VU|2606|90006	CAL	BYD U LINE	验证通过	Y	Y
+11	Clerk Z Tram Check Gauge	ASM-123871-00|VU|2606|90007	CAL	BYD LINE	验证通过	Y	Y
+11	Clerk Z Tram Check Gauge	ASM-123871-00|VU|2606|90008	CAL	BYD LINE	验证通过	Y	Y
+11	Clerk Z Tram Check Gauge	ASM-123871-00|VU|2606|90009	CAL	BYD LINE	等效性未通过	Y	N
+11	Clerk Z Tram Check Gauge	ASM-123871-00|VU|2606|90010	CAL	BYD I LINE	验证通过	Y	Y
+11	Clerk Z Tram Check Gauge	ASM-123871-00|VU|2606|90011	CAL	BYD LINE	验证通过	Y	Y
+12	Clerk Z Tram Check Square	ASM-123872-00|VU|2512|90002	CAL	BYD LINE	验证通过	Y	Y
+12	Clerk Z Tram Check Square	ASM-123872-01|FU|2606|90005	CAL	BYD U LINE	验证通过	Y	Y
+12	Clerk Z Tram Check Square	ASM-123872-01|FU|2606|90007	CAL	BYD LINE	验证通过	Y	Y
+12	Clerk Z Tram Check Square	ASM-123872-01|FU|2606|90009	CAL	BYD LINE	等效性未通过		N
+12	Clerk Z Tram Check Square	ASM-123872-01|FU|2606|90010	CAL	BYD I LINE	验证通过	Y	Y
+12	Clerk Z Tram Check Square	ASM-123872-01|FU|2606|90011	CAL	BYD LINE	验证通过	Y	Y
+12	Clerk Z Tram Check Square	ASM-123872-01|FU|2606|90012	CAL	BYD LINE	验证通过	Y	Y
+12	Clerk Z Tram Check Square	ASM-123872-01|FU|2606|90014	CAL	BYD I LINE	验证通过	Y	Golden
+12	Clerk Z Tram Check Square	ASM-123872-01|FU|2606|90015	CAL	BYD LINE	验证通过	Y	Y
+13	Clerk Z Tram Check Base	ASM-123873-00|VU|2510|90000	CAL	BYD LINE	验证通过	Y	/
+13	Clerk Z Tram Check Base	ASM-123873-00|VU|2512|90001	CAL	BYD LINE	验证通过	Y	/
+13	Clerk Z Tram Check Base	ASM-123873-00|FU|2606|90002	CAL	BYD LINE	验证通过	Y	/
+13	Clerk Z Tram Check Base	ASM-123873-00|FU|2606|90003	CAL	BYD LINE	验证通过	Y	/
+13	Clerk Z Tram Check Base	ASM-123873-00|FU|2606|90004	CAL	BYD LINE	验证通过	Y	/
+13	Clerk Z Tram Check Base	ASM-123873-00|FU|2606|90005	CAL	BYD LINE	验证通过	Y	/
+13	Clerk Z Tram Check Base	ASM-123873-00|FU|2606|90006	CAL	BYD U LINE	验证通过	Y	/
+13	Clerk Z Tram Check Base	ASM-123873-00|FU|2606|90007	CAL	BYD U LINE	验证通过	Y	/
+13	Clerk Z Tram Check Base	ASM-123873-00|FU|2606|90008	CAL	BYD I LINE	验证通过	Y	/
+14	Clerk Cal 1 Base	ASM-123876-00|BYD|90001	CAL	BYD LINE	验证通过	Y	/
+14	Clerk Cal 1 Base	ASM-123876-00|BYD|90002	CAL	BYD LINE	验证通过	Y	/
+14	Clerk Cal 1 Base	ASM-123876-00|BYD|90003	CAL	BYD LINE	验证通过	Y	/
+14	Clerk Cal 1 Base	ASM-123876-00|BYD|90004	CAL	BYD LINE	验证通过	Y	/
+14	Clerk Cal 1 Base	ASM-123876-00|BYD|90005	CAL	BYD LINE	验证通过	Y	/
+14	Clerk Cal 1 Base	ASM-123876-00|BYD|90006	CAL	BYD LINE	验证通过	Y	/
+14	Clerk Cal 1 Base	ASM-123876-00|BYD|90007	CAL	BYD LINE	验证通过	Y	/
+14	Clerk Cal 1 Base	ASM-123876-00|BYD|90008	CAL	BYD LINE	验证通过	Y	/
+14	Clerk Cal 1 Base	ASM-123876-00|BYD|90009	CAL	BYD LINE	验证通过	Y	/
+14	Clerk Cal 1 Base	ASM-123876-00|BYD|90010	CAL	BYD LINE	验证通过	Y	/
+14	Clerk Cal 1 Base	ASM-123876-00|BYD|90011	CAL	BYD LINE	验证通过	Y	/
+14	Clerk Cal 1 Base	ASM-123876-00|BYD|90012	CAL	BYD LINE	验证通过	Y	/
+14	Clerk Cal 1 Base	ASM-123876-00|BYD|90013	CAL	BYD LINE	验证通过	Y	/
+14	Clerk Cal 1 Base	ASM-123876-00|BYD|90014	CAL	BYD LINE	验证通过	Y	/
+14	Clerk Cal 1 Base	ASM-123876-00|BYD|90015	CAL	BYD LINE	验证通过	Y	/
+14	Clerk Cal 1 Base	ASM-123876-00|BYD|90016	CAL	BYD LINE	验证通过	Y	/
+15	Clerk Z Force Check Jig and Adapter	ASM-123877-00|VU|2512|90001	CAL	BYD I LINE	验证通过	Y	Y
+15	Clerk Z Force Check Jig and Adapter	ASM-123877-00|VU|2605|90003	CAL	BYD LINE	验证通过	Y	Y
+15	Clerk Z Force Check Jig and Adapter	ASM-123877-00|VU|2606|90004	CAL	BYD U LINE	验证通过	Y	Y
+15	Clerk Z Force Check Jig and Adapter	ASM-123877-00|VU|2606|90005	CAL	BYD LINE	验证通过	Y	Y
+15	Clerk Z Force Check Jig and Adapter	ASM-123877-00|VU|2606|90006	CAL	BYD U LINE	验证通过	Y	Y
+15	Clerk Z Force Check Jig and Adapter	ASM-123877-00|VU|2606|90007	CAL	BYD U LINE	验证通过	Y	Y
+15	Clerk Z Force Check Jig and Adapter	ASM-123877-00|VU|2606|90008	CAL	BYD LINE	验证通过	Y	Y
+15	Clerk Z Force Check Jig and Adapter	ASM-123877-00|VU|2606|90009	CAL	BYD I LINE	验证通过	Y	Y
+15	Clerk Z Force Check Jig and Adapter	ASM-123877-00|VU|2606|90010	CAL	BYD U LINE	验证通过	Y	Y
+15	Clerk Z Force Check Jig and Adapter	ASM-123877-00|VU|2606|90011	CAL	BYD U LINE	验证通过	Y	Y
+15	Clerk Z Force Check Jig and Adapter	ASM-123877-00|VU|2606|90012	CAL	BYD I LINE	验证通过	Y	Y
+15	Clerk Z Force Check Jig and Adapter	ASM-123877-00|VU|2606|90013	CAL	BYD U LINE	验证通过	Y	Y
+15	Clerk Z Force Check Jig and Adapter	ASM-123877-00|VU|2606|90014	CAL	BYD LINE	验证通过	Y	Y
+15	Clerk Z Force Check Jig and Adapter	ASM-123877-00|VU|2606|90015	CAL	BYD U LINE	验证通过	Y	Y
+15	Clerk Z Force Check Jig and Adapter	ASM-123877-00|VU|2606|90016	CAL	BYD LINE	验证通过	Y	Y
+15	Clerk Z Force Check Jig and Adapter	ASM-123877-00|VU|2606|90017	CAL	BYD U LINE	验证通过	Y	Y
+15	Clerk Z Force Check Jig and Adapter	ASM-123877-00|VU|2606|90018	CAL	BYD U LINE	验证通过	Y	Y
+15	Clerk Z Force Check Jig and Adapter	ASM-123877-00|VU|2606|90019	CAL	BYD U LINE	验证通过	Y	Y
+15	Clerk Z Force Check Jig and Adapter	ASM-123877-00|VU|2606|90020	CAL	BYD I LINE	验证通过	Y	Y
+15	Clerk Z Force Check Jig and Adapter	ASM-123877-00|VU|2606|90021	CAL	BYD I LINE	验证通过	Y	Y
+16	Clerk Z Sweep Weight Gauge	ASM-123878-00|VU|2510|90000	CAL	BYD LINE	验证通过	Y	/
+16	Clerk Z Sweep Weight Gauge	ASM-123878-00|VU|2603|90001	CAL	BYD I LINE	验证通过	Y	/
+16	Clerk Z Sweep Weight Gauge	ASM-123878-00|VU|2606|90004	CAL	BYD LINE	验证通过	Y	/
+16	Clerk Z Sweep Weight Gauge	ASM-123878-00|VU|2606|90005	CAL	BYD I LINE	验证通过	Y	/
+16	Clerk Z Sweep Weight Gauge	ASM-123878-00|VU|2606|90006	CAL	BYD LINE	验证通过	Y	/
+16	Clerk Z Sweep Weight Gauge	ASM-123878-00|VU|2606|90007	CAL	BYD LINE	验证通过	Y	/
+16	Clerk Z Sweep Weight Gauge	ASM-123878-00|VU|2606|90008	CAL	BYD LINE	验证通过	Y	/
+16	Clerk Z Sweep Weight Gauge	ASM-123878-00|VU|2606|90009	CAL	BYD I LINE	验证通过	Y	/
+16	Clerk Z Sweep Weight Gauge	ASM-123878-00|VU|2606|90010	CAL	BYD LINE	验证通过	Y	/
+16	Clerk Z Sweep Weight Gauge	ASM-123878-00|VU|2606|90011	CAL	BYD LINE	验证通过	Y	/
+16	Clerk Z Sweep Weight Gauge	ASM-123878-00|VU|2606|90012	CAL	BYD I LINE	验证通过	Y	/
+16	Clerk Z Sweep Weight Gauge	ASM-123878-00|VU|2606|90013	CAL	BYD LINE	验证通过	Y	/
+16	Clerk Z Sweep Weight Gauge	ASM-123878-00|VU|2606|90014	CAL	BYD I LINE	验证通过	Y	/
+16	Clerk Z Sweep Weight Gauge	ASM-123878-00|VU|2606|90015	CAL	BYD LINE	验证通过	Y	/
+16	Clerk Z Sweep Weight Gauge	ASM-123878-00|VU|2606|90016	CAL	BYD LINE	验证通过	Y	/
+16	Clerk Z Sweep Weight Gauge	ASM-123878-00|VU|2606|90017	CAL	BYD LINE	验证通过	Y	/
+16	Clerk Z Sweep Weight Gauge	ASM-123878-00|VU|2606|90018	CAL	BYD LINE	验证通过	Y	/
+16	Clerk Z Sweep Weight Gauge	ASM-123878-00|VU|2606|90019	CAL	BYD LINE	验证通过	Y	/
+16	Clerk Z Sweep Weight Gauge	ASM-123878-00|VU|2606|90020	CAL	BYD LINE	验证通过	Y	/
+16	Clerk Z Sweep Weight Gauge	ASM-123878-00|VU|2606|90021	CAL	BYD I LINE	验证通过	Y	/
+17	Clerk CARTRIDGE SIGNED RFID CHECK Jig	ASM-123880-00|FL|2510|90000	CAL	BYD I LINE	验证通过	Y	/
+17	Clerk CARTRIDGE SIGNED RFID CHECK Jig	ASM-123880-00|FL|2606|90001	CAL	BYD LINE	验证通过	Y	/
+17	Clerk CARTRIDGE SIGNED RFID CHECK Jig	ASM-123880-00|FL|2606|90002	CAL	BYD U LINE	验证通过	Y	/
+17	Clerk CARTRIDGE SIGNED RFID CHECK Jig	ASM-123880-00|FL|2606|90003	CAL	BYD LINE	验证通过	Y	/
+17	Clerk CARTRIDGE SIGNED RFID CHECK Jig	ASM-123880-00|FL|2606|90004	CAL	BYD U LINE	验证通过	Y	/
+17	Clerk CARTRIDGE SIGNED RFID CHECK Jig	ASM-123880-00|FL|2606|90005	CAL	BYD U LINE	验证通过	Y	/
+17	Clerk CARTRIDGE SIGNED RFID CHECK Jig	ASM-123880-00|FL|2606|90006	CAL	BYD U LINE	验证通过	Y	/
+17	Clerk CARTRIDGE SIGNED RFID CHECK Jig	ASM-123880-00|FL|2606|90007	CAL	BYD LINE	验证通过	Y	/
+17	Clerk CARTRIDGE SIGNED RFID CHECK Jig	ASM-123880-00|FL|2606|90008	CAL	BYD U LINE	验证通过	Y	/
+17	Clerk CARTRIDGE SIGNED RFID CHECK Jig	ASM-123880-00|FL|2606|90009	CAL	BYD LINE	验证通过	Y	/
+17	Clerk CARTRIDGE SIGNED RFID CHECK Jig	ASM-123880-00|FL|2606|90010	CAL	BYD U LINE	验证通过	Y	/
+17	Clerk CARTRIDGE SIGNED RFID CHECK Jig	ASM-123880-00|FL|2606|90011	CAL	BYD U LINE	验证通过	Y	/
+18	Clerk Dispense Motor Check Jig	ASM-123881-00|FU|2604|90001	CAL	BYD LINE	验证通过	Y	/
+18	Clerk Dispense Motor Check Jig	ASM-123881-00|FU|2604|90003	CAL	BYD I LINE	验证通过	Y	/
+18	Clerk Dispense Motor Check Jig	ASM-123881-00|FU|2604|90004	CAL	BYD U LINE	验证通过	Y	/
+18	Clerk Dispense Motor Check Jig	ASM-123881-00|FU|2604|90005	CAL	BYD LINE	验证通过	Y	/
+18	Clerk Dispense Motor Check Jig	ASM-123881-00|FU|2604|90006	CAL	BYD U LINE	验证通过	Y	/
+18	Clerk Dispense Motor Check Jig	ASM-123881-00|FU|2604|90007	CAL	BYD I LINE	验证通过	Y	/
+18	Clerk Dispense Motor Check Jig	ASM-123881-00|FU|2604|90008	CAL	BYD U LINE	验证通过	Y	/
+18	Clerk Dispense Motor Check Jig	ASM-123881-00|FU|2604|90009	CAL	BYD U LINE	验证通过	Y	/
+18	Clerk Dispense Motor Check Jig	ASM-123881-00|FU|2604|90010	CAL	BYD LINE	验证通过	Y	/
+18	Clerk Dispense Motor Check Jig	ASM-123881-00|FU|2604|90011	CAL	BYD U LINE	验证通过	Y	/
+18	Clerk Dispense Motor Check Jig	ASM-123881-00|FU|2604|90012	CAL	BYD U LINE	验证通过	Y	/
+18	Clerk Dispense Motor Check Jig	ASM-123881-00|FU|2604|90013	CAL	BYD LINE	验证通过	Y	/
+19	Clerk UV cover	ASM-126410-01|VU|2512|90000	CAL	BYD LINE	验证通过	Y	/
+19	Clerk UV cover	ASM-126410-01|VU|2606|90001	CAL	BYD LINE	验证通过	Y	/
+19	Clerk UV cover	ASM-126410-01|VU|2606|90002	CAL	BYD LINE	验证通过	Y	/
+19	Clerk UV cover	ASM-126410-01|VU|2606|90003	CAL	BYD LINE	验证通过	Y	/
+19	Clerk UV cover	ASM-126410-01|VU|2606|90004	CAL	BYD LINE	验证通过	Y	/
+19	Clerk UV cover	ASM-126410-01|VU|2606|90005	CAL	BYD LINE	验证通过	Y	/
+19	Clerk UV cover	ASM-126410-01|VU|2606|90006	CAL	BYD LINE	验证通过	Y	/
+19	Clerk UV cover	ASM-126410-01|VU|2606|90007	CAL	BYD LINE	验证通过	Y	/
+19	Clerk UV cover	ASM-126410-01|VU|2606|90008	CAL	BYD LINE	验证通过	Y	/
+19	Clerk UV cover	ASM-126410-01|VU|2606|90009	CAL	BYD LINE	验证通过	Y	/
+19	Clerk UV cover	ASM-126410-01|VU|2606|90010	CAL	BYD LINE	验证通过	Y	/
+19	Clerk UV cover	ASM-126410-01|VU|2606|90011	CAL	BYD LINE	验证通过	Y	/
+19	Clerk UV cover	ASM-126410-01|VU|2606|90012	CAL	BYD LINE	验证通过	Y	/
+19	Clerk UV cover	ASM-126410-01|VU|2606|90013	CAL	BYD LINE	验证通过	Y	/
+19	Clerk UV cover	ASM-126410-01|VU|2606|90014	CAL	BYD LINE	验证通过	Y	/
+19	Clerk UV cover	ASM-126410-01|VU|2606|90015	CAL	BYD LINE	验证通过	Y	/
+19	Clerk UV cover	ASM-126410-01|VU|2606|90016	CAL	BYD LINE	验证通过	Y	/
+19	Clerk UV cover	ASM-126410-01|VU|2606|90017	CAL	BYD LINE	验证通过	Y	/
+19	Clerk UV cover	ASM-126410-01|VU|2606|90018	CAL	BYD LINE	验证通过	Y	/
+19	Clerk UV cover	ASM-126410-01|VU|2606|90019	CAL	BYD LINE	验证通过	Y	/
+19	Clerk UV cover	ASM-126410-01|VU|2606|90020	CAL	BYD LINE	验证通过	Y	/
+19	Clerk UV cover	ASM-126410-01|VU|2606|90021	CAL	BYD LINE	验证通过	Y	/
+19	Clerk UV cover	ASM-126410-01|VU|2606|90022	CAL	BYD LINE	验证通过	Y	/
+19	Clerk UV cover	ASM-126410-01|VU|2606|90023	CAL	BYD LINE	验证通过	Y	/
+19	Clerk UV cover	ASM-126410-01|VU|2606|90024	CAL	BYD LINE	验证通过	Y	/
+19	Clerk UV cover	ASM-126410-01|VU|2606|90025	CAL	BYD LINE	验证通过	Y	/
+20	Clerk REPRESENTATIVE TANK FIXTURE	ASM-124889-00|FL|2602|90000	CAL	BYD LINE	待验证	Y	/
+20	Clerk REPRESENTATIVE TANK FIXTURE	ASM-124889-00|FL|2606|90002	CAL	BYD LINE	待验证	Y	/
+20	Clerk REPRESENTATIVE TANK FIXTURE	ASM-124889-00|FL|2606|90003	CAL	BYD LINE	验证通过	Y	Y
+20	Clerk REPRESENTATIVE TANK FIXTURE	ASM-124889-00|FL|2606|90004	CAL	BYD LINE	待验证	Y	/
+20	Clerk REPRESENTATIVE TANK FIXTURE	ASM-124889-00|FL|2606|90005	CAL	BYD U LINE	验证通过	Y	Y
+20	Clerk REPRESENTATIVE TANK FIXTURE	ASM-124889-00|FL|2606|90006	CAL	BYD LINE	待验证	Y	/
+20	Clerk REPRESENTATIVE TANK FIXTURE	ASM-124889-00|FL|2606|90007	CAL	BYD U LINE	验证通过	Y	Y
+20	Clerk REPRESENTATIVE TANK FIXTURE	ASM-124889-00|FL|2606|90008	CAL	BYD U LINE	验证通过	Y	Y
+20	Clerk REPRESENTATIVE TANK FIXTURE	ASM-124889-00|FL|2606|90009	CAL	BYD U LINE	验证通过	Y	Y
+20	Clerk REPRESENTATIVE TANK FIXTURE	ASM-124889-00|FL|2606|90010	CAL	BYD I LINE	验证通过	Y	Y
+20	Clerk REPRESENTATIVE TANK FIXTURE	ASM-124889-00|FL|2606|90011	CAL	BYD LINE	待验证	Y	/
+20	Clerk REPRESENTATIVE TANK FIXTURE	ASM-124889-00|FL|2606|90012	CAL	BYD U LINE	验证通过	Y	Y
+20	Clerk REPRESENTATIVE TANK FIXTURE	ASM-124889-00|FL|2606|90013	CAL	BYD U LINE	验证通过	Y	Y
+20	Clerk REPRESENTATIVE TANK FIXTURE	ASM-124889-00|FL|2606|90014	CAL	BYD U LINE	验证通过	Y	Y
+20	Clerk REPRESENTATIVE TANK FIXTURE	ASM-124889-00|FL|2606|90015	CAL	BYD LINE	待验证	Y	/
+20	Clerk REPRESENTATIVE TANK FIXTURE	ASM-124889-00|FL|2606|90016	CAL	BYD LINE	待验证	Y	/
+20	Clerk REPRESENTATIVE TANK FIXTURE	ASM-124889-00|FL|2606|90017	CAL	BYD LINE	待验证	Y	/
+20	Clerk REPRESENTATIVE TANK FIXTURE	ASM-124889-00|FL|2606|90018	CAL	BYD LINE	待验证	Y	/
+20	Clerk REPRESENTATIVE TANK FIXTURE	ASM-124889-00|FL|2606|90019	CAL	BYD U LINE	验证通过	Y	Y
+20	Clerk REPRESENTATIVE TANK FIXTURE	ASM-124889-00|FL|2606|90020	CAL	BYD I LINE	验证通过	Y	Y
+20	Clerk REPRESENTATIVE TANK FIXTURE	ASM-124889-00|FL|2606|90021	CAL	BYD LINE	验证通过	Y	Y
+20	Clerk REPRESENTATIVE TANK FIXTURE	ASM-124889-00|FL|2606|90022	CAL	BYD LINE	待验证	Y	/
+20	Clerk REPRESENTATIVE TANK FIXTURE	ASM-124889-00|FL|2606|90023	CAL	BYD U LINE	验证通过	Y	Y
+20	Clerk REPRESENTATIVE TANK FIXTURE	ASM-124889-00|FL|2606|90024	CAL	BYD LINE	待验证	Y	/
+20	Clerk REPRESENTATIVE TANK FIXTURE	ASM-124889-00|FL|2606|90025	CAL	BYD I LINE	验证通过	Y	Y
+20	Clerk REPRESENTATIVE TANK FIXTURE	ASM-124889-00|FL|2606|90026	CAL	BYD LINE	待验证	Y	/
+21	Clerk Accelerometer and Levelness Fixture	ASM-123882-00|VU|2606|90004	CAL	BYD I LINE	验证通过	Y	Y
+21	Clerk Accelerometer and Levelness Fixture	ASM-123882-00|VU|2606|90005	CAL	BYD I LINE	验证通过	Y	Y
+21	Clerk Accelerometer and Levelness Fixture	ASM-123882-00|VU|2606|90006	CAL	BYD I LINE	验证通过	Y	Y
+21	Clerk Accelerometer and Levelness Fixture	ASM-123882-00|VU|2606|90007	CAL	BYD U LINE	验证通过	Y	Y
+21	Clerk Accelerometer and Levelness Fixture	ASM-123882-00|VU|2606|90008	CAL	BYD U LINE	验证通过	Y	Y
+21	Clerk Accelerometer and Levelness Fixture	ASM-123882-00|VU|2606|90009	CAL	BYD I LINE	验证通过	Y	Y
+21	Clerk Accelerometer and Levelness Fixture	ASM-123882-00|VU|2606|90010	CAL	BYD LINE	验证通过	Y	Y
+21	Clerk Accelerometer and Levelness Fixture	ASM-123882-00|VU|2606|90011	CAL	BYD LINE	验证通过	Y	Y
+21	Clerk Accelerometer and Levelness Fixture	ASM-123882-00|VU|2606|90012	CAL	BYD I LINE	验证通过	Y	Y
+21	Clerk Accelerometer and Levelness Fixture	ASM-123882-00|VU|2606|90013	CAL	BYD LINE	验证通过	Y	Y
+21	Clerk Accelerometer and Levelness Fixture	ASM-123882-00|VU|2606|90014	CAL	BYD LINE	验证通过	Y	Y
+21	Clerk Accelerometer and Levelness Fixture	ASM-123882-00|VU|2606|90015	CAL	BYD LINE	验证通过	Y	Y
+21	Clerk Accelerometer and Levelness Fixture	ASM-123882-00|VU|2606|90016	CAL	BYD LINE	验证通过	Y	Y
+21	Clerk Accelerometer and Levelness Fixture	ASM-123882-00|VU|2606|90017	CAL	BYD U LINE	验证通过	Y	Y
+21	Clerk Accelerometer and Levelness Fixture	ASM-123882-00|VU|2606|90018	CAL	BYD U LINE	验证通过	Y	Y
+21	Clerk Accelerometer and Levelness Fixture	ASM-123882-00|VU|2606|90019	CAL	BYD LINE	验证通过	Y	Y
+21	Clerk Accelerometer and Levelness Fixture	ASM-123882-00|VU|2606|90021	CAL	BYD U LINE	验证通过	Y	Y
+21	Clerk Accelerometer and Levelness Fixture	ASM-123882-00|VU|2606|90022	CAL	BYD U LINE	验证通过	Y	Y
+21	Clerk Accelerometer and Levelness Fixture	ASM-123882-00|VU|2606|90023	CAL	BYD U LINE	验证通过	Y	Y
+21	Clerk Accelerometer and Levelness Fixture	ASM-123882-00|VU|2606|90024	CAL	BYD U LINE	验证通过	Y	Y
+21	Clerk Accelerometer and Levelness Fixture	ASM-123882-00|VU|2606|90025	CAL	BYD LINE	验证通过	Y	Y
+21	Clerk Accelerometer and Levelness Fixture	ASM-123882-00|VU|2606|90026	CAL	BYD U LINE	验证通过	Y	Y
+21	Clerk Accelerometer and Levelness Fixture	ASM-123882-00|VU|2606|90027	CAL	BYD U LINE	验证通过	Y	Y
+21	Clerk Accelerometer and Levelness Fixture	ASM-123882-00|VU|2606|90028	CAL	BYD LINE	验证通过	Y	Y
+22	Clerk 6mm Sanic Check Jig	ASM-126318-00|VU|2603|90000	CAL	BYD I LINE	验证通过	Y	Y
+22	Clerk 6mm Sanic Check Jig	ASM-126318-00|VU|2606|90004	CAL	BYD LINE	验证通过	Y	Y
+22	Clerk 6mm Sanic Check Jig	ASM-126318-00|VU|2606|90005	CAL	BYD LINE	验证通过	Y	Y
+22	Clerk 6mm Sanic Check Jig	ASM-126318-00|VU|2606|90012	CAL	BYD LINE	验证通过	Y	Y
+22	Clerk 6mm Sanic Check Jig	ASM-126318-00|VU|2606|90013	CAL	BYD LINE	验证通过	Y	Y
+22	Clerk 6mm Sanic Check Jig	ASM-126318-00|VU|2606|90014	CAL	BYD LINE	验证通过	Y	Y
+22	Clerk 6mm Sanic Check Jig	ASM-126318-00|VU|2606|90015	CAL	BYD LINE	验证通过	Y	Y
+22	Clerk 6mm Sanic Check Jig	ASM-126318-00|VU|2606|90016	CAL	BYD LINE	验证通过	Y	Y
+22	Clerk 6mm Sanic Check Jig	ASM-126318-00|VU|2606|90017	CAL	BYD LINE	验证通过	Y	Y
+22	Clerk 6mm Sanic Check Jig	ASM-126318-00|VU|2606|90018	CAL	BYD LINE	验证通过	Y	Y
+22	Clerk 6mm Sanic Check Jig	ASM-126318-00|VU|2606|90019	CAL	BYD LINE	验证未通过		/
+22	Clerk 6mm Sanic Check Jig	ASM-126318-00|VU|2606|90020	CAL	BYD LINE	验证通过	Y	Y
+22	Clerk 6mm Sanic Check Jig	ASM-126318-00|VU|2606|90021	CAL	BYD LINE	验证通过	Y	Y
+22	Clerk 6mm Sanic Check Jig	ASM-126318-00|VU|2606|90024	CAL	BYD LINE	验证通过	Y	Y
+22	Clerk 6mm Sanic Check Jig	ASM-126318-00|VU|2606|90025	CAL	BYD LINE	验证通过	Y	Y
+22	Clerk 6mm Sanic Check Jig	ASM-126318-00|VU|2606|90026	CAL	BYD LINE	验证通过	Y	Y
+22	Clerk 6mm Sanic Check Jig	ASM-126318-00|VU|2606|90028	CAL	BYD U LINE	验证通过	Y	Y
+22	Clerk 6mm Sanic Check Jig	ASM-126318-00|VU|2606|90029	CAL	BYD I LINE	验证通过	Y	Y
+22	Clerk 6mm Sanic Check Jig	ASM-126318-00|VU|2606|90030	CAL	BYD I LINE	验证通过	Y	Y
+22	Clerk 6mm Sanic Check Jig	ASM-126318-00|VU|2606|90031	CAL	BYD U LINE	验证通过	Y	Y
+22	Clerk 6mm Sanic Check Jig	ASM-126318-00|VU|2606|90032	CAL	BYD LINE	验证通过	Y	Y
+22	Clerk 6mm Sanic Check Jig	ASM-126318-00|VU|2606|90033	CAL	BYD I LINE	验证通过	Y	Y
+22	Clerk 6mm Sanic Check Jig	ASM-126318-00|VU|2606|90034	CAL	BYD U LINE	验证通过	Y	Y
+22	Clerk 6mm Sanic Check Jig	ASM-126318-00|VU|2606|90035	CAL	BYD LINE	验证通过	Y	Y
+22	Clerk 6mm Sanic Check Jig	ASM-126318-00|VU|2606|90036	CAL	BYD U LINE	验证通过	Y	Y
+23	Clerk 15mm Sanic Check Jig	ASM-126319-00|VU|2603|90000	CAL	BYD I LINE	验证通过	Y	/
+23	Clerk 15mm Sanic Check Jig	ASM-126319-00|VU|2606|90012	CAL	BYD LINE	验证通过	Y	Y
+23	Clerk 15mm Sanic Check Jig	ASM-126319-00|VU|2606|90013	CAL	BYD LINE	验证通过	Y	Y
+23	Clerk 15mm Sanic Check Jig	ASM-126319-00|VU|2606|90014	CAL	BYD LINE	验证通过	Y	Y
+23	Clerk 15mm Sanic Check Jig	ASM-126319-00|VU|2606|90015	CAL	BYD LINE	验证通过	Y	Y
+23	Clerk 15mm Sanic Check Jig	ASM-126319-00|VU|2606|90016	CAL	BYD LINE	验证通过	Y	Y
+23	Clerk 15mm Sanic Check Jig	ASM-126319-00|VU|2606|90017	CAL	BYD LINE	验证通过	Y	Y
+23	Clerk 15mm Sanic Check Jig	ASM-126319-00|VU|2606|90018	CAL	BYD LINE	验证通过	Y	Y
+23	Clerk 15mm Sanic Check Jig	ASM-126319-00|VU|2606|90019	CAL	BYD LINE	验证通过	Y	Y
+23	Clerk 15mm Sanic Check Jig	ASM-126319-00|VU|2606|90020	CAL	BYD LINE	验证通过	Y	Y
+23	Clerk 15mm Sanic Check Jig	ASM-126319-00|VU|2606|90028	CAL	BYD U LINE	验证通过	Y	Y
+23	Clerk 15mm Sanic Check Jig	ASM-126319-00|VU|2606|90029	CAL	BYD LINE	验证通过	Y	Y
+23	Clerk 15mm Sanic Check Jig	ASM-126319-00|VU|2606|90030	CAL	BYD U LINE	验证通过	Y	Y
+23	Clerk 15mm Sanic Check Jig	ASM-126319-00|VU|2606|90031	CAL	BYD U LINE	验证通过	Y	Y
+23	Clerk 15mm Sanic Check Jig	ASM-126319-00|VU|2606|90032	CAL	BYD U LINE	验证通过	Y	Y
+23	Clerk 15mm Sanic Check Jig	ASM-126319-00|VU|2606|90033	CAL	BYD I LINE	验证通过	Y	Y
+23	Clerk 15mm Sanic Check Jig	ASM-126319-00|VU|2606|90034	CAL	BYD U LINE	验证通过	Y	Y
+23	Clerk 15mm Sanic Check Jig	ASM-126319-00|VU|2606|90035	CAL	BYD U LINE	验证通过	Y	Y
+23	Clerk 15mm Sanic Check Jig	ASM-126319-00|VU|2606|90036	CAL	BYD U LINE	验证通过	Y	Y
+23	Clerk 15mm Sanic Check Jig	ASM-126319-00|VU|2606|90037	CAL	BYD I LINE	验证通过	Y	Y
+23	Clerk 15mm Sanic Check Jig	ASM-126319-00|VU|2606|90038	CAL	BYD U LINE	验证通过	Y	Y
+23	Clerk 15mm Sanic Check Jig	ASM-126319-00|VU|2606|90039	CAL	BYD U LINE	验证通过	Y	Y
+23	Clerk 15mm Sanic Check Jig	ASM-126319-00|VU|2606|90040	CAL	BYD LINE	验证通过	Y	Y
+23	Clerk 15mm Sanic Check Jig	ASM-126319-00|VU|2606|90041	CAL	BYD I LINE	验证通过	Y	Y
+23	Clerk 15mm Sanic Check Jig	ASM-126319-00|VU|2606|90042	CAL	BYD U LINE	验证通过	Y	Y
+24	Clerk Parallelism Setting Shim	ASM-123883-00|FU|2603|90003	CAL	BYD LINE	验证通过	Y	Y
+24	Clerk Parallelism Setting Shim	ASM-123883-00|FU|2606|90004	CAL	BYD I LINE	验证通过	Y	Y
+24	Clerk Parallelism Setting Shim	ASM-123883-00|FU|2606|90005	CAL	BYD LINE	验证通过	Y	Y
+24	Clerk Parallelism Setting Shim	ASM-123883-00|FU|2606|90006	CAL	BYD U LINE	验证通过	Y	Y
+24	Clerk Parallelism Setting Shim	ASM-123883-00|FU|2606|90007	CAL	BYD LINE	验证通过	Y	Y
+24	Clerk Parallelism Setting Shim	ASM-123883-00|FU|2606|90008	CAL	BYD LINE	验证通过	Y	Y
+24	Clerk Parallelism Setting Shim	ASM-123883-00|FU|2606|90009	CAL	BYD U LINE	验证通过	Y	Y
+24	Clerk Parallelism Setting Shim	ASM-123883-00|FU|2606|90010	CAL	BYD LINE	验证通过	Y	Y
+24	Clerk Parallelism Setting Shim	ASM-123883-00|FU|2606|90011	CAL	BYD LINE	未使用	Y	/
+24	Clerk Parallelism Setting Shim	ASM-123883-00|FU|2606|90012	CAL	BYD LINE	未使用	Y	/
+24	Clerk Parallelism Setting Shim	ASM-123883-00|FU|2606|90013	CAL	BYD LINE	验证通过	Y	Y
+24	Clerk Parallelism Setting Shim	ASM-123883-00|FU|2606|90014	CAL	BYD LINE	验证通过	Y	Y
+24	Clerk Parallelism Setting Shim	ASM-123883-00|FU|2606|90015	CAL	BYD LINE	验证通过	Y	Y
+24	Clerk Parallelism Setting Shim	ASM-123883-00|FU|2606|90016	CAL	BYD LINE	验证通过	Y	Y
+24	Clerk Parallelism Setting Shim	ASM-123883-00|FU|2606|90017	CAL	BYD LINE	未使用	Y	/
+24	Clerk Parallelism Setting Shim	ASM-123883-00|FU|2606|90018	CAL	BYD LINE	验证通过	Y	Y
+24	Clerk Parallelism Setting Shim	ASM-123883-00|FU|2606|90019	CAL	BYD LINE	未使用	Y	/
+24	Clerk Parallelism Setting Shim	ASM-123883-00|FU|2606|90020	CAL	BYD LINE	验证通过	Y	Y
+24	Clerk Parallelism Setting Shim	ASM-123883-00|FU|2606|90021	CAL	BYD LINE	验证通过	Y	Y
+24	Clerk Parallelism Setting Shim	ASM-123883-00|FU|2606|90022	CAL	BYD LINE	未使用	Y	/
+24	Clerk Parallelism Setting Shim	ASM-123883-00|FU|2606|90023	CAL	BYD I LINE	验证通过	Y	Y
+24	Clerk Parallelism Setting Shim	ASM-123883-00|FU|2606|90024	CAL	BYD LINE	验证通过，寄美国	Y	Y
+24	Clerk Parallelism Setting Shim	ASM-123883-00|FU|2606|90025	CAL	BYD LINE	验证通过	Y	Y
+24	Clerk Parallelism Setting Shim	ASM-123883-00|FU|2606|90026	CAL	BYD I LINE	验证通过	Y	Y
+24	Clerk Parallelism Setting Shim	ASM-123883-00|FU|2606|90027	CAL	BYD LINE	验证通过	Y	Y
+24	Clerk Parallelism Setting Shim	ASM-123883-00|FU|2606|90028	CAL	BYD U LINE	验证通过	Y	Y
+24	Clerk Parallelism Setting Shim	ASM-123883-00|FU|2606|90029	CAL	BYD LINE	验证通过	Y	Y
+24	Clerk Parallelism Setting Shim	ASM-123883-00|FU|2606|90030	CAL	BYD LINE	验证通过	Y	Y
+24	Clerk Parallelism Setting Shim	ASM-123883-00|FU|2606|90031	CAL	BYD LINE	寄给FL	Y	/
+25	Clerk Calibration Reference BP	ASM-123885-00|FU|2604|90004	CAL	BYD U LINE	验证通过	Y	Y
+25	Clerk Calibration Reference BP	ASM-123885-00|VU|2606|90005	CAL	BYD LINE	验证通过	Y	Y
+25	Clerk Calibration Reference BP	ASM-123885-00|VU|2606|90006	CAL	BYD I LINE	验证通过	Y	Y
+25	Clerk Calibration Reference BP	ASM-123885-00|VU|2606|90007	CAL	BYD LINE	验证通过	Y	Y
+25	Clerk Calibration Reference BP	ASM-123885-00|VU|2606|90008	CAL	BYD LINE	验证通过	Y	Y
+25	Clerk Calibration Reference BP	ASM-123885-00|VU|2606|90009	CAL	BYD U LINE	验证通过	Y	Y
+25	Clerk Calibration Reference BP	ASM-123885-00|VU|2606|90010	CAL	BYD LINE	验证通过	Y	Y
+25	Clerk Calibration Reference BP	ASM-123885-00|VU|2606|90011	CAL	BYD I LINE	验证通过	Y	Y
+25	Clerk Calibration Reference BP	ASM-123885-00|VU|2606|90012	CAL	BYD LINE	验证通过	Y	Y
+25	Clerk Calibration Reference BP	ASM-123885-00|VU|2606|90013	CAL	BYD LINE	验证通过	Y	Y
+25	Clerk Calibration Reference BP	ASM-123885-00|VU|2606|90014	CAL	BYD LINE	验证通过	Y	Y
+25	Clerk Calibration Reference BP	ASM-123885-00|VU|2606|90015	CAL	BYD I LINE	验证通过	Y	Y
+25	Clerk Calibration Reference BP	ASM-123885-00|VU|2606|90016	CAL	BYD LINE	验证通过	Y	Y
+25	Clerk Calibration Reference BP	ASM-123885-00|VU|2606|90017	CAL	BYD LINE	验证通过	Y	Y
+25	Clerk Calibration Reference BP	ASM-123885-00|VU|2606|90018	CAL	BYD LINE	验证通过	Y	Y
+25	Clerk Calibration Reference BP	ASM-123885-00|VU|2606|90019	CAL	BYD LINE	验证通过	Y	Y
+25	Clerk Calibration Reference BP	ASM-123885-00|VU|2606|90020	CAL	BYD LINE	验证通过	Y	Y
+25	Clerk Calibration Reference BP	ASM-123885-00|VU|2606|90021	CAL	BYD LINE	验证通过	Y	Y
+25	Clerk Calibration Reference BP	ASM-123885-00|VU|2606|90022	CAL	BYD LINE	待重新做等效性	Y	/
+25	Clerk Calibration Reference BP	ASM-123885-00|VU|2606|90023	CAL	BYD LINE	验证通过	Y	Y
+25	Clerk Calibration Reference BP	ASM-123885-00|VU|2606|90024	CAL	BYD LINE	验证通过	Y	Y
+25	Clerk Calibration Reference BP	ASM-123885-00|VU|2606|90025	CAL	BYD LINE	验证通过	Y	Y
+25	Clerk Calibration Reference BP	ASM-123885-00|VU|2606|90026	CAL	BYD LINE	验证通过	Y	Y
+25	Clerk Calibration Reference BP	ASM-123885-00|VU|2606|90027	CAL	BYD LINE	验证通过	Y	Y
+25	Clerk Calibration Reference BP	ASM-123885-00|VU|2606|90028	CAL	BYD U LINE	验证通过	Y	Y
+26	Clerk Parallelism Check Gauge	ASM-123884-00|VU|2510|90000	CAL	BYD I LINE	验证通过	Y	Golden
+26	Clerk Parallelism Check Gauge	ASM-123884-00|VU|2603|90001	CAL	SZ office	/	Y	Y
+26	Clerk Parallelism Check Gauge	ASM-123884-00|VU|2603|90002	CAL	HQ	/	Y	Y
+26	Clerk Parallelism Check Gauge	ASM-123884-01|VU|2606|90003	CAL	BYD LINE	验证通过	Y	Y
+26	Clerk Parallelism Check Gauge	ASM-123884-01|VU|2606|90004	CAL	BYD LINE	验证通过	Y	Y
+26	Clerk Parallelism Check Gauge	ASM-123884-01|VU|2606|90005	CAL	BYD LINE	验证通过	Y	Y
+26	Clerk Parallelism Check Gauge	ASM-123884-01|VU|2606|90006	CAL	BYD LINE	验证通过	Y	Y
+26	Clerk Parallelism Check Gauge	ASM-123884-01|VU|2606|90007	CAL	BYD LINE	验证通过	Y	Y
+26	Clerk Parallelism Check Gauge	ASM-123884-01|VU|2606|90008	CAL	BYD LINE	验证通过	Y	Y
+26	Clerk Parallelism Check Gauge	ASM-123884-01|VU|2606|90009	CAL	BYD LINE	验证通过	Y	Y
+26	Clerk Parallelism Check Gauge	ASM-123884-01|VU|2606|90010	CAL	BYD LINE	验证通过	Y	Y
+26	Clerk Parallelism Check Gauge	ASM-123884-01|VU|2606|90011	CAL	BYD LINE	验证通过	Y	Y
+26	Clerk Parallelism Check Gauge	ASM-123884-01|VU|2606|90012	CAL	BYD LINE	验证通过	Y	Y
+26	Clerk Parallelism Check Gauge	ASM-123884-01|VU|2606|90013	CAL	BYD LINE	验证通过	Y	Y
+26	Clerk Parallelism Check Gauge	ASM-123884-01|VU|2606|90014	CAL	BYD LINE	验证通过	Y	Y
+26	Clerk Parallelism Check Gauge	ASM-123884-01|VU|2606|90015	CAL	BYD U LINE	验证通过	Y	Y
+26	Clerk Parallelism Check Gauge	ASM-123884-01|VU|2606|90016	CAL	BYD LINE	验证通过	Y	Y
+26	Clerk Parallelism Check Gauge	ASM-123884-01|VU|2606|90017	CAL	BYD LINE	验证通过	Y	Y
+26	Clerk Parallelism Check Gauge	ASM-123884-01|VU|2606|90018	CAL	BYD U LINE	验证通过	Y	Y
+26	Clerk Parallelism Check Gauge	ASM-123884-01|VU|2606|90019	CAL	BYD I LINE	验证通过	Y	Y
+26	Clerk Parallelism Check Gauge	ASM-123884-01|VU|2606|90020	CAL	BYD LINE	验证通过	Y	Y
+26	Clerk Parallelism Check Gauge	ASM-123884-01|VU|2606|90021	CAL	BYD LINE	验证通过	Y	Y
+26	Clerk Parallelism Check Gauge	ASM-123884-01|VU|2606|90022	CAL	BYD LINE	验证通过	Y	Y
+26	Clerk Parallelism Check Gauge	ASM-123884-01|VU|2606|90023	CAL	BYD LINE	验证通过	Y	Y
+26	Clerk Parallelism Check Gauge	ASM-123884-01|VU|2606|90024	CAL	BYD LINE	验证通过	Y	Y
+26	Clerk Parallelism Check Gauge	ASM-123884-01|VU|2606|90025	CAL	BYD I LINE	验证通过	Y	Y
+26	Clerk Parallelism Check Gauge	ASM-123884-01|VU|2606|90026	CAL	BYD LINE	验证通过	Y	Y
+26	Clerk Parallelism Check Gauge	ASM-123884-01|VU|2606|90027	CAL	BYD LINE	验证通过	Y	Y
+27	Clerk BLU Burn-in Rack	ASM-127147-00-BN-2606-90000	CAL	BYD LINE	已交付待连线	Y	/
+27	Clerk BLU Burn-in Rack	ASM-127147-00-BN-2606-90001	CAL	BYD LINE	已交付待连线	Y	/
+27	Clerk BLU Burn-in Rack	ASM-127147-00-BN-2607-90002	CAL	BYD LINE	已交付待连线	Y	/
+27	Clerk BLU Burn-in Rack	ASM-127147-00-BN-2607-90003	CAL	BYD LINE	已交付待连线	Y	/
+27	Clerk BLU Burn-in Rack	ASM-127147-00-BN-2607-90004	CAL	BYD LINE	已交付待连线	Y	/
+27	Clerk BLU Burn-in Rack	ASM-127147-00-BN-2607-90005	CAL	BYD LINE	已交付待连线	Y	/
+27	Clerk BLU Burn-in Rack	ASM-127147-00-BN-2607-90006	CAL	BYD LINE	已交付待连线	Y	/
+27	Clerk BLU Burn-in Rack	ASM-127147-00-BN-2607-90007	CAL	BYD LINE	已交付待连线	Y	/
+27	Clerk BLU Burn-in Rack	ASM-127147-00-BN-2607-90008	CAL	BYD LINE	已交付待连线	Y	/
+27	Clerk BLU Burn-in Rack	ASM-127147-00-BN-2607-90009	CAL	BYD LINE	已交付待连线	Y	/
+27	Clerk BLU Burn-in Rack	ASM-127147-00-BN-2607-90010	CAL	BYD LINE	已交付待连线	Y	/
+28	Clerk Camera Check Jig	ASM-126609-00|FU|2606|90000	CAL	BYD LINE	验证通过	Y	/
+28	Clerk Camera Check Jig	ASM-126609-00|FU|2606|90001	CAL	BYD LINE	验证通过	Y	/
+28	Clerk Camera Check Jig	ASM-126609-00|FU|2606|90003	CAL	BYD U LINE	验证通过	Y	/
+28	Clerk Camera Check Jig	ASM-126609-00|FU|2606|90004	CAL	BYD U LINE	验证通过	Y	/
+28	Clerk Camera Check Jig	ASM-126609-00|FU|2606|90005	CAL	BYD U LINE	验证通过	Y	/
+28	Clerk Camera Check Jig	ASM-126609-00|FU|2606|90006	CAL	BYD I LINE	验证通过	Y	/
+28	Clerk Camera Check Jig	ASM-126609-00|FU|2606|90007	CAL	BYD I LINE	验证通过	Y	/
+28	Clerk Camera Check Jig	ASM-126609-00|FU|2606|90008	CAL	BYD U LINE	验证通过	Y	/
+28	Clerk Camera Check Jig	ASM-126609-00|FU|2606|90009	CAL	BYD U LINE	验证通过	Y	/
+28	Clerk Camera Check Jig	ASM-126609-00|FU|2606|90010	CAL	BYD U LINE	验证通过	Y	/
+28	Clerk Camera Check Jig	ASM-126609-00|FU|2606|90011	CAL	BYD I LINE	验证通过	Y	/
+28	Clerk Camera Check Jig	ASM-126609-00|FU|2606|90012	CAL	BYD U LINE	验证通过	Y	/
+28	Clerk Camera Check Jig	ASM-126609-00|FU|2606|90013	CAL	BYD I LINE	验证通过	Y	/
+28	Clerk Camera Check Jig	ASM-126609-00|FU|2606|90014	CAL	BYD U LINE	验证通过	Y	/
+28	Clerk Camera Check Jig	ASM-126609-00|FU|2606|90015	CAL	BYD LINE	验证通过	Y	/
+28	Clerk Camera Check Jig	ASM-126609-00|FU|2606|90016	CAL	BYD U LINE	验证通过	Y	/
+28	Clerk Camera Check Jig	ASM-126609-00|FU|2606|90017	CAL	BYD LINE	验证通过	Y	/
+28	Clerk Camera Check Jig	ASM-126609-00|FU|2606|90018	CAL	BYD U LINE	验证通过	Y	/
+28	Clerk Camera Check Jig	ASM-126609-00|FU|2606|90019	CAL	BYD LINE	验证通过	Y	/
+28	Clerk Camera Check Jig	ASM-126609-00|FU|2606|90020	CAL	BYD I LINE	验证通过	Y	/
+28	Clerk Camera Check Jig	ASM-126609-00|FU|2606|90021	CAL	BYD U LINE	验证通过	Y	/
+28	Clerk Camera Check Jig	ASM-126609-00|FU|2606|90022	CAL	BYD U LINE	验证通过	Y	/
+28	Clerk Camera Check Jig	ASM-126609-00|FU|2606|90023	CAL	BYD LINE	验证通过	Y	/
+28	Clerk Camera Check Jig	ASM-126609-00|FU|2606|90024	CAL	BYD I LINE	验证通过	Y	/
+28	Clerk Camera Check Jig	ASM-126609-00|FU|2606|90025	CAL	BYD LINE	验证通过	Y	/
+28	Clerk Camera Check Jig	ASM-126609-00|FU|2606|90026	CAL	BYD U LINE	验证通过	Y	/
+28	Clerk Camera Check Jig	ASM-126609-00|FU|2606|90027	CAL	BYD LINE	验证通过	Y	/
+29	Clerk Sanic and Camera Assembly Fixture	ASM-128169-00|FU|2606|90000	ATA	BYD LINE	验证通过	Y	/
+29	Clerk Sanic and Camera Assembly Fixture	ASM-128169-00|FU|2606|90001	ATA	BYD LINE	验证通过	Y	/
+30	Clerk BLU Diffuser Pasting Fixture-semi auto	ASM-128170-00|BYD|90001	ASM	BYD LINE	验证通过	Y	/
+30	Clerk BLU Diffuser Pasting Fixture-semi auto	ASM-128170-00|BYD|90002	ASM	BYD LINE	验证通过	Y	/`;
+
+        // 内存中聚合后的治具与单机集合
+        let rawFixtureData = [];
+        let parsedUnitsByModel = new Map();
+
+        // 备品数据集 (无价格信息，凸显安全库存与在手对比)
+        let rawSpareData = [
+            { name: "Power meter", vendor: "Thorlabs", model: "Thorlabs PM100USB", pn: "ELEC-117209", minStock: 2, onHand: 0, address: "BYD 车间" },
+            { name: "Motor", vendor: "BYD", model: "NEMA 17 STEPPER 48mm", pn: "MTR-111464", minStock: 10, onHand: 0, address: "BYD 车间" },
+            { name: "TOOTH PULLEY", vendor: "BYD", model: "GT2 28", pn: "PWT-111462", minStock: 15, onHand: 0, address: "BYD 车间" },
+            { name: "Control PCBA", vendor: "synthetos", model: "TinyG V8", pn: "PCA-118739", minStock: 5, onHand: 0, address: "BYD 车间" },
+            { name: "THORLABS POWER SENSOR", vendor: "Thorlabs", model: "S120VC", pn: "ELEC-117218", minStock: 3, onHand: 0, address: "BYD 车间" },
+            { name: "5MM PINHOLE APERTURE 1IN OD", vendor: "Thorlabs", model: "P5000K", pn: "MECH-118697", minStock: 5, onHand: 0, address: "BYD 车间" },
+            { name: "SM1 Cage Plate Clamping", vendor: "Thorlabs", model: "CP08/M", pn: "MECH-107016", minStock: 6, onHand: 0, address: "BYD 车间" },
+            { name: "POWER METER BRICK MOUNT", vendor: "Thorlabs", model: "ECM225", pn: "MECH-118698", minStock: 4, onHand: 0, address: "BYD 车间" },
+            { name: "THORLABS LENS TUBE 1\"", vendor: "Thorlabs", model: "SM1L10", pn: "MECH-118701", minStock: 4, onHand: 0, address: "BYD 车间" },
+            { name: "2MM PINHOLE APERTURE", vendor: "Thorlabs", model: "P2000K", pn: "MECH-118702", minStock: 4, onHand: 0, address: "BYD 车间" },
+            { name: "Fowler dial test indicator", vendor: "SYLVAC", model: "805-4321", pn: "MECH-805432", minStock: 3, onHand: 0, address: "BYD 车间" },
+            { name: "HV tester (高压测试仪)", vendor: "Gwinstek", model: "GPT-9804", pn: "ELEC-GPT9804", minStock: 2, onHand: 3, address: "BYD" },
+            { name: "Force gauge 500N (测力计)", vendor: "Nextech", model: "DFS-XJ 500N", pn: "MECH-DFS500", minStock: 10, onHand: 18, address: "CPT" },
+            { name: "Force gauge 1000N", vendor: "Nextech", model: "DFS-XJ 1000N", pn: "MECH-DFS1000", minStock: 5, onHand: 0, address: "CPT" },
+            { name: "Industrial NUC 工业主机", vendor: "零刻", model: "N150 双2.5网口", pn: "COMP-N150", minStock: 100, onHand: 140, address: "BYD" },
+            { name: "Barcode scanner 扫码枪", vendor: "Honeywell", model: "1900-C (GHD+USB)", pn: "ELEC-1900C", minStock: 100, onHand: 150, address: "BYD" }
+        ];
+
+        let chartInstances = {};
+        let onlyShowAlertSpare = false;
+
+        // 解析并聚合单机清单（无论是内嵌基线还是来自 API 的最新行）
+        function parseAndBuildFixturesFromLines(linesArray) {
+            parsedUnitsByModel.clear();
+
+            linesArray.forEach((lineOrCols) => {
+                let cols = Array.isArray(lineOrCols) ? lineOrCols : lineOrCols.split('\t').map(c => String(c).trim());
+                if (cols.length < 5) return;
+                
+                // 忽略纯表头行
+                if (cols[0] === 'No.' || cols[1] === 'Fixture Name') return;
+
+                const no = parseInt(cols[0], 10);
+                if (isNaN(no) || no < 1 || no > 30) return;
+
+                const name = String(cols[1]).trim();
+                const sn = String(cols[2]).trim();
+                const cat = String(cols[3]).trim();
+                const loc = String(cols[4]).trim();
+                const valStatus = cols[5] ? String(cols[5]).trim() : '待验证';
+                const iqcFlag = cols[6] ? String(cols[6]).trim().toUpperCase() : '';
+                const equiv = cols[7] ? String(cols[7]).trim() : '/';
+
+                const isIqcOk = iqcFlag === 'Y' || iqcFlag.includes('Y');
+                const isPassed = valStatus.includes('通过') || equiv === 'Y' || equiv === 'Golden';
+
+                if (!parsedUnitsByModel.has(no)) {
+                    parsedUnitsByModel.set(no, []);
+                }
+
+                parsedUnitsByModel.get(no).push({
+                    no,
+                    modelName: name,
+                    sn,
+                    category: cat,
+                    location: loc,
+                    valStatus,
+                    isArrived: true,
+                    isIqcOk,
+                    isValidated: isPassed,
+                    equiv
+                });
+            });
+
+            // 组装 30 款治具模型汇总对象
+            rawFixtureData = RAW_SHEET_FIXTURES.map(meta => {
+                const units = parsedUnitsByModel.get(meta.no) || [];
+                const onHand = units.length;
+                const iqcOk = units.filter(u => u.isIqcOk).length;
+                const passed = units.filter(u => u.isValidated).length;
+
+                let statusConclusion = '已到齐，且验证合格';
+                if (passed < onHand) {
+                    statusConclusion = `${passed}/${onHand} 台通过，余量跟进中`;
+                }
+                if (meta.no === 11 || meta.no === 12) {
+                    statusConclusion = '部分机台等效性待复测';
+                } else if (meta.no === 20) {
+                    statusConclusion = '15台通过，其余待降低噪声后复验';
+                } else if (meta.no === 24) {
+                    statusConclusion = '已到位30套，部分寄出/未使用点检中';
+                }
+
+                return {
+                    id: meta.no,
+                    name: meta.name,
+                    category: meta.category,
+                    vendor: meta.vendor,
+                    owner: meta.owner,
+                    mp: meta.target || onHand,
+                    onHand: onHand,
+                    iqcOk: iqcOk,
+                    passed: passed,
+                    status: statusConclusion,
+                    units: units
+                };
+            });
+        }
+
+        // 初始化加载内嵌权威基线数据
+        parseAndBuildFixturesFromLines(RAW_DATA_TEXT.trim().split('\n'));
+
+        // ==================== 3. 异步拉取 GOOGLE APPS SCRIPT 实时数据 ====================
+        async function fetchLiveSheetData(isManual = false) {
+            const syncIcon = document.getElementById('sync-icon');
+            const syncStatusEl = document.getElementById('sync-status-indicator');
+            const headerBadgeText = document.getElementById('header-badge-text');
+
+            if (!LIVE_API_URL || LIVE_API_URL.includes("YOUR_DEPLOYMENT_ID")) {
+                if (isManual) {
+                    openApiConfigModal();
+                    showToast("请先配置 Google Apps Script Web App URL", "fa-circle-info");
+                }
+                return;
+            }
+
+            if (syncIcon) syncIcon.classList.add('fa-spin');
+
+            try {
+                const resp = await fetch(LIVE_API_URL, { method: 'GET', mode: 'cors' });
+                if (!resp.ok) throw new Error("HTTP error " + resp.status);
+
+                const data = await resp.json();
+                let updated = false;
+
+                // 1. 同步治具单台数据
+                if (data && data.fixtures && data.fixtures.length > 1) {
+                    parseAndBuildFixturesFromLines(data.fixtures);
+                    updated = true;
+                }
+
+                // 2. 同步备品数据 (如果有返回)
+                if (data && data.spares && data.spares.length > 1) {
+                    parseSparesFromLiveMatrix(data.spares);
+                    updated = true;
+                }
+
+                if (updated) {
+                    const nowStr = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+                    renderDashboard();
+                    
+                    if (syncStatusEl) {
+                        syncStatusEl.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Sheet 自动同步中 (${nowStr})`;
+                    }
+                    if (headerBadgeText) {
+                        const totalOnHand = rawFixtureData.reduce((s, d) => s + (d.onHand || 0), 0);
+                        headerBadgeText.innerText = `已从 Sheet 实时同步 30 款治具共 ${totalOnHand} 台数据`;
+                    }
+                    showToast("已成功从 Google Sheet 实时同步最新数据", "fa-rotate");
+                }
+            } catch (err) {
+                console.warn("未能从 Google Sheet API 取得最新响应，维持内嵌权威基线展示:", err);
+                if (isManual) {
+                    showToast("同步请求受阻，正使用高保真内嵌数据", "fa-triangle-exclamation");
+                }
+            } finally {
+                if (syncIcon) syncIcon.classList.remove('fa-spin');
+            }
+        }
+
+        // 解析来自 Apps Script 的备品矩阵
+        function parseSparesFromLiveMatrix(matrix) {
+            if (!Array.isArray(matrix) || matrix.length < 2) return;
+            const newSpares = [];
+            // 跳过表头
+            for (let i = 1; i < matrix.length; i++) {
+                const row = matrix[i];
+                if (!row || row.length < 2) continue;
+                const name = String(row[0] || '').trim();
+                if (!name) continue;
+                newSpares.push({
+                    name: name,
+                    vendor: String(row[1] || '-').trim(),
+                    model: String(row[2] || '-').trim(),
+                    pn: String(row[3] || '-').trim(),
+                    minStock: parseFloat(String(row[4] || '0').replace(/[^\d.]/g, '')) || 0,
+                    onHand: parseFloat(String(row[5] || '0').replace(/[^\d.]/g, '')) || 0,
+                    address: String(row[7] || row[6] || 'BYD 车间').trim()
+                });
+            }
+            if (newSpares.length > 0) {
+                rawSpareData = newSpares;
+            }
+        }
+
+        // 页面就绪后启动
+        window.onload = function() {
+            try {
+                initFixtureDropdown();
+                renderDashboard();
+                // 启动后台静默拉取
+                fetchLiveSheetData(false);
+                // 每 60 秒静默轮询一次
+                setInterval(() => fetchLiveSheetData(false), 60000);
+            } catch (err) {
+                console.error("Dashboard render error:", err);
+            }
+        };
+
+        // ==================== 4. API 配置弹窗交互 ====================
+        function openApiConfigModal() {
+            const input = document.getElementById('api-url-input');
+            if (input && LIVE_API_URL && !LIVE_API_URL.includes("YOUR_DEPLOYMENT_ID")) {
+                input.value = LIVE_API_URL;
+            }
+            document.getElementById('api-config-modal').classList.remove('hidden');
+        }
+
+        function closeApiConfigModal() {
+            document.getElementById('api-config-modal').classList.add('hidden');
+        }
+
+        function saveAndApplyApiUrl() {
+            const val = document.getElementById('api-url-input').value.trim();
+            if (!val || !val.startsWith("http")) {
+                showToast("请输入有效的 Apps Script Web App URL", "fa-triangle-exclamation");
+                return;
+            }
+            LIVE_API_URL = val;
+            try {
+                localStorage.setItem("CLERK_SHEET_API_URL", val);
+            } catch(e) {}
+            closeApiConfigModal();
+            showToast("API 链接已保存，正发起即时同步...", "fa-cloud-arrow-down");
+            fetchLiveSheetData(true);
+        }
+
+        // ==================== 5. 侧边栏与基础 UI ====================
+        function switchTab(tab) {
+            const pageFixture = document.getElementById('page-fixture');
+            const pageSpare = document.getElementById('page-spare');
+            const btnFixture = document.getElementById('tab-btn-fixture');
+            const btnSpare = document.getElementById('tab-btn-spare');
+            const pageTitle = document.getElementById('page-title');
+
+            if (tab === 'fixture') {
+                pageFixture.classList.remove('hidden');
+                pageSpare.classList.add('hidden');
+                btnFixture.classList.add('active');
+                btnFixture.classList.remove('text-slate-400');
+                btnSpare.classList.remove('active');
+                btnSpare.classList.add('text-slate-400');
+                if (pageTitle) pageTitle.innerText = 'Fixture 到货与 Qualification 验证追踪';
+            } else {
+                pageFixture.classList.add('hidden');
+                pageSpare.classList.remove('hidden');
+                btnSpare.classList.add('active');
+                btnSpare.classList.remove('text-slate-400');
+                btnFixture.classList.remove('active');
+                btnFixture.classList.add('text-slate-400');
+                if (pageTitle) pageTitle.innerText = 'J&F Spare Parts 备品耗材安全库存追踪';
+                setTimeout(() => {
+                    renderSpareModule();
+                }, 50);
+            }
+        }
+
+        function showToast(message, iconClass = 'fa-circle-check') {
+            const toast = document.getElementById('toast-notification');
+            const msg = document.getElementById('toast-message');
+            const icon = document.getElementById('toast-icon');
+            if (!toast || !msg) return;
+            msg.innerText = message;
+            if (icon) icon.className = `fa-solid ${iconClass} text-emerald-400 text-base`;
+            toast.classList.remove('translate-y-20', 'opacity-0', 'pointer-events-none');
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0', 'pointer-events-none');
+            }, 3200);
+        }
+
+        // 备品导入模态框操作
+        function openSpareImportModal() {
+            document.getElementById('spare-import-modal').classList.remove('hidden');
+        }
+
+        function closeSpareImportModal() {
+            document.getElementById('spare-import-modal').classList.add('hidden');
+        }
+
+        function parseAndApplySpareData() {
+            const rawText = document.getElementById('spare-paste-input').value.trim();
+            if (!rawText) {
+                showToast("请先粘贴表格内容", "fa-triangle-exclamation");
+                return;
+            }
+
+            const lines = rawText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+            if (lines.length === 0) return;
+
+            const firstRowCols = lines[0].split('\t');
+            let startIndex = 0;
+            let nameIdx = 0, vendorIdx = 1, modelIdx = 2, pnIdx = 3, minStockIdx = 4, onHandIdx = 5, addrIdx = 7;
+
+            if (firstRowCols.some(c => /part|name|名称|consign/i.test(c))) {
+                startIndex = 1;
+                firstRowCols.forEach((col, i) => {
+                    const c = col.toLowerCase();
+                    if (/consign|part|名称|品名/i.test(c)) nameIdx = i;
+                    else if (/vendor|供应商/i.test(c)) vendorIdx = i;
+                    else if (/model|型号|规格/i.test(c)) modelIdx = i;
+                    else if (/pn|料号|part no/i.test(c)) pnIdx = i;
+                    else if (/min|safety|安全/i.test(c)) minStockIdx = i;
+                    else if (/on hand|在手|当前|stock|bought|库存/i.test(c)) onHandIdx = i;
+                    else if (/address|地址|库位|loc/i.test(c)) addrIdx = i;
+                });
+            }
+
+            const newParsedList = [];
+            for (let i = startIndex; i < lines.length; i++) {
+                const cols = lines[i].split('\t').map(c => c.trim());
+                if (cols.length < 2) continue;
+
+                const name = cols[nameIdx] || cols[0] || '未命名备品';
+                const vendor = cols[vendorIdx] || '-';
+                const model = cols[modelIdx] || '-';
+                const pn = cols[pnIdx] || '-';
+                
+                const rawMin = cols[minStockIdx] ? cols[minStockIdx].replace(/[^\d.]/g, '') : '0';
+                const rawOnHand = cols[onHandIdx] ? cols[onHandIdx].replace(/[^\d.]/g, '') : '0';
+                const minStock = parseFloat(rawMin) || 0;
+                const onHand = parseFloat(rawOnHand) || 0;
+                const address = cols[addrIdx] || 'BYD 车间';
+
+                newParsedList.push({ name, vendor, model, pn, minStock, onHand, address });
+            }
+
+            if (newParsedList.length > 0) {
+                rawSpareData = newParsedList;
+                renderSpareModule();
+                closeSpareImportModal();
+                showToast(`已成功导入并解析 ${newParsedList.length} 项真实备品数据`, "fa-circle-check");
+            } else {
+                showToast("解析失败，请检查复制格式是否为表格列", "fa-triangle-exclamation");
+            }
+        }
+
+        // 初始化表格右上角治具下拉选择框
+        function initFixtureDropdown() {
+            const select = document.getElementById('table-fixture-filter');
+            if (!select) return;
+
+            const currentVal = select.value;
+            select.innerHTML = '<option value="ALL">所有治具 (All Fixtures 汇总)</option>';
+            rawFixtureData.forEach(item => {
+                const opt = document.createElement('option');
+                opt.value = item.id;
+                opt.textContent = `No.${item.id} ${item.name} (${item.category})`;
+                select.appendChild(opt);
+            });
+            if (currentVal && currentVal !== 'ALL') {
+                select.value = currentVal;
+            }
+        }
+
+        function onTableFixtureSelectChange() {
+            renderDashboard();
+        }
+
+        function renderDashboard() {
+            renderFixtureKPI();
+            renderFixtureModule();
+            renderSpareModule();
+        }
+
+        // 渲染 4 大总结指标卡片
+        function renderFixtureKPI() {
+            const totalDemand = rawFixtureData.reduce((s, d) => s + (d.mp || 0), 0);
+            const totalOnHand = rawFixtureData.reduce((s, d) => s + (d.onHand || 0), 0);
+            const totalIqc = rawFixtureData.reduce((s, d) => s + (d.iqcOk || 0), 0);
+            const totalPassed = rawFixtureData.reduce((s, d) => s + (d.passed || 0), 0);
+
+            const onhandRate = totalDemand > 0 ? ((totalOnHand / totalDemand) * 100).toFixed(1) : 0;
+            const iqcRate = totalOnHand > 0 ? Math.min(100, (totalIqc / totalOnHand) * 100).toFixed(1) : 0;
+            const passRate = totalOnHand > 0 ? Math.min(100, (totalPassed / totalOnHand) * 100).toFixed(1) : 0;
+
+            document.getElementById('kpi-fix-demand').innerText = totalDemand;
+            document.getElementById('kpi-fix-demand-sub').innerText = `统计 30 款治具规划总量`;
+
+            document.getElementById('kpi-fix-onhand').innerText = totalOnHand;
+            document.getElementById('kpi-fix-onhand-rate').innerText = `到货率 ${onhandRate}%`;
+
+            document.getElementById('kpi-fix-iqc').innerText = totalIqc;
+            document.getElementById('kpi-fix-iqc-rate').innerText = `IQC通过率 ${iqcRate}%`;
+
+            document.getElementById('kpi-fix-passed').innerText = totalPassed;
+            document.getElementById('kpi-fix-pass-rate').innerText = `验证完成率 ${passRate}%`;
+        }
+
+        // 渲染治具模块主视图与图表
+        function renderFixtureModule() {
+            const select = document.getElementById('table-fixture-filter');
+            const filterVal = select ? select.value : 'ALL';
+            
+            let displayData = rawFixtureData;
+            if (filterVal !== 'ALL') {
+                displayData = rawFixtureData.filter(d => String(d.id) === String(filterVal));
+            }
+
+            renderFixtureCharts(displayData, filterVal);
+            renderFixtureTable(displayData, filterVal);
+        }
+
+        // 渲染图表与款数 Summary 模块
+        function renderFixtureCharts(data, filterVal) {
+            if (chartInstances.fixCompare) chartInstances.fixCompare.destroy();
+
+            const totalModels = rawFixtureData.length;
+            const calCount = rawFixtureData.filter(d => d.category === 'CAL').length;
+            const ataCount = rawFixtureData.filter(d => d.category === 'ATA').length;
+            const asmCount = rawFixtureData.filter(d => d.category === 'ASM').length;
+
+            const fullyArrivedModels = rawFixtureData.filter(d => d.onHand >= d.mp && d.mp > 0).length;
+            const fullyIqcModels = rawFixtureData.filter(d => d.onHand > 0 && d.iqcOk >= d.onHand).length;
+            const fullyValidatedModels = rawFixtureData.filter(d => d.onHand > 0 && d.passed >= d.onHand).length;
+
+            document.getElementById('sum-total-types').innerText = totalModels;
+            document.getElementById('sum-cal-types').innerText = calCount;
+            document.getElementById('sum-ata-types').innerText = ataCount;
+            document.getElementById('sum-asm-types').innerText = asmCount;
+            document.getElementById('sum-arrived-all-types').innerText = `${fullyArrivedModels} / ${totalModels}`;
+            document.getElementById('sum-passed-all-types').innerText = `${fullyValidatedModels} / ${totalModels}`;
+
+            const ctx1 = document.getElementById('fixtureCompareChart').getContext('2d');
+            if (filterVal === 'ALL') {
+                document.getElementById('chart-compare-title').innerHTML = `
+                    <i class="fa-solid fa-chart-column text-blue-600 mr-1.5"></i> 治具款数综合汇总 (Fixture Summary)
+                `;
+
+                chartInstances.fixCompare = new Chart(ctx1, {
+                    type: 'bar',
+                    data: {
+                        labels: ['治具总款数', 'CAL 校验类', 'ATA 工装类', 'ASM 组装类', '已到齐款数', '已 IQC 检完款数', '已验证完款数'],
+                        datasets: [{
+                            label: '款数 (Models)',
+                            data: [totalModels, calCount, ataCount, asmCount, fullyArrivedModels, fullyIqcModels, fullyValidatedModels],
+                            backgroundColor: ['#3b82f6', '#2563eb', '#f59e0b', '#10b981', '#6366f1', '#d97706', '#059669'],
+                            borderRadius: 6,
+                            maxBarThickness: 46
+                        }]
+                    },
+                    options: { 
+                        responsive: true, 
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: { 
+                            y: { beginAtZero: true, ticks: { stepSize: 5 } },
+                            x: { grid: { display: false } }
+                        }
+                    }
+                });
+            } else {
+                const item = data[0];
+                document.getElementById('chart-compare-title').innerHTML = `
+                    <i class="fa-solid fa-chart-column text-blue-600 mr-1.5"></i> No.${item.id} ${item.name} 单款台数状态
+                `;
+
+                chartInstances.fixCompare = new Chart(ctx1, {
+                    type: 'bar',
+                    data: {
+                        labels: ['需求台数', '到货在手', '过了 IQC', '验证完成'],
+                        datasets: [{
+                            label: '机台数量 (Units)',
+                            data: [item.mp, item.onHand, item.iqcOk, item.passed],
+                            backgroundColor: ['#94a3b8', '#3b82f6', '#f59e0b', '#10b981'],
+                            borderRadius: 6,
+                            maxBarThickness: 50
+                        }]
+                    },
+                    options: { 
+                        responsive: true, 
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: { y: { beginAtZero: true } }
+                    }
+                });
+            }
+
+            renderKeyHighlights();
+        }
+
+        // 渲染重点项目 Highlight 列表
+        function renderKeyHighlights() {
+            const container = document.getElementById('highlight-items-container');
+            if (!container) return;
+
+            const highlights = [
+                {
+                    id: 20,
+                    name: "No.20 Representative Tank Fixture",
+                    tag: "降噪待复验",
+                    tagColor: "bg-rose-100 text-rose-800 border-rose-200",
+                    borderLeft: "border-l-4 border-rose-500",
+                    summary: "已到位 26 台，当前 15 台验证通过，剩余 11 台待降低噪声信号后重做等效性验证。",
+                    owner: "Tony Wu"
+                },
+                {
+                    id: 11,
+                    name: "No.11 & 12 Z Tram Check Gauge / Square",
+                    tag: "等效性未通过",
+                    tagColor: "bg-amber-100 text-amber-800 border-amber-200",
+                    borderLeft: "border-l-4 border-amber-500",
+                    summary: "90009 机台等效性未过；已收到新垂直杆，生锈杆更换中，待重新复核闭环。",
+                    owner: "Owen Yang"
+                },
+                {
+                    id: 27,
+                    name: "No.27 Clerk BLU Burn-in Rack",
+                    tag: "待连线交付",
+                    tagColor: "bg-blue-100 text-blue-800 border-blue-200",
+                    borderLeft: "border-l-4 border-blue-500",
+                    summary: "11 台老化架均已到位送达 BYD 线体，目前状态为“已交付待连线”及电性能点检。",
+                    owner: "Alex Chen"
+                },
+                {
+                    id: 22,
+                    name: "No.22 Clerk 6mm Sanic Check Jig",
+                    tag: "单机待闭环",
+                    tagColor: "bg-amber-100 text-amber-800 border-amber-200",
+                    borderLeft: "border-l-4 border-amber-500",
+                    summary: "共 25 台在手，24 台验证通过；机台 90019 验证未通过，需持续排查尺寸及贴膜。",
+                    owner: "Tony Wu"
+                },
+                {
+                    id: 25,
+                    name: "No.25 Calibration Reference BP",
+                    tag: "待重做等效性",
+                    tagColor: "bg-purple-100 text-purple-800 border-purple-200",
+                    borderLeft: "border-l-4 border-purple-500",
+                    summary: "已到位 25 台，24 台验证通过；机台 90022 标记为待重新做等效性实验。",
+                    owner: "Sam Hou"
+                }
+            ];
+
+            container.innerHTML = '';
+            highlights.forEach(item => {
+                container.innerHTML += `
+                    <div onclick="viewSingleFixture(${item.id})" class="p-3 bg-slate-50 hover:bg-blue-50/70 border border-slate-200 rounded-lg cursor-pointer transition shadow-xs group ${item.borderLeft}">
+                        <div class="flex items-center justify-between gap-1 mb-1">
+                            <span class="font-bold text-slate-800 group-hover:text-blue-600 transition truncate">${item.name}</span>
+                            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded border ${item.tagColor} shrink-0">${item.tag}</span>
+                        </div>
+                        <p class="text-[11px] text-slate-600 line-clamp-2 leading-relaxed mb-1.5">${item.summary}</p>
+                        <div class="flex items-center justify-between text-[10px] text-slate-400">
+                            <span>DRI: <strong class="text-slate-600">${item.owner}</strong></span>
+                            <span class="text-blue-600 font-medium group-hover:underline flex items-center gap-1">
+                                查看机台明细 <i class="fa-solid fa-angle-right text-[9px]"></i>
+                            </span>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        // 渲染明细表格（支持“所有治具”与“单款机台明细”两级视图）
+        function renderFixtureTable(data, filterVal) {
+            const thead = document.getElementById('fixture-table-thead');
+            const tbody = document.getElementById('fixture-table-body');
+            const title = document.getElementById('fixture-table-main-title');
+            const countBadge = document.getElementById('fixture-table-count');
+
+            tbody.innerHTML = '';
+
+            if (filterVal === 'ALL') {
+                const totalUnitsCount = rawFixtureData.reduce((s, d) => s + (d.onHand || 0), 0);
+                title.innerText = '全部治具明细追踪清单';
+                countBadge.innerText = `显示全部 30 款治具汇总 (共 ${totalUnitsCount} 台)`;
+
+                thead.innerHTML = `
+                    <tr>
+                        <th class="px-4 py-3 text-center">No.</th>
+                        <th class="px-6 py-3">Fixture Name (治具名称)</th>
+                        <th class="px-6 py-3">Vendor</th>
+                        <th class="px-6 py-3">Category</th>
+                        <th class="px-6 py-3 text-center">需求总数</th>
+                        <th class="px-6 py-3 text-center">到货 (On Hand)</th>
+                        <th class="px-6 py-3 text-center">过了 IQC</th>
+                        <th class="px-6 py-3 text-center">验证完成</th>
+                        <th class="px-6 py-3">当前状态结论</th>
+                    </tr>
+                `;
+
+                data.forEach(item => {
+                    const isFullyOk = item.passed >= item.onHand && item.onHand >= item.mp && item.mp > 0;
+                    const statusClass = isFullyOk 
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        : 'bg-amber-50 text-amber-700 border border-amber-200';
+
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-slate-50 transition cursor-pointer group" onclick="viewSingleFixture(${item.id})">
+                            <td class="px-4 py-4 text-center font-bold text-slate-400 group-hover:text-blue-600">${item.id}</td>
+                            <td class="px-6 py-4 font-bold text-slate-900 group-hover:text-blue-600 flex items-center gap-2">
+                                ${item.name}
+                                <i class="fa-solid fa-arrow-right text-[10px] text-slate-300 group-hover:text-blue-600"></i>
+                            </td>
+                            <td class="px-6 py-4">${item.vendor}</td>
+                            <td class="px-6 py-4">
+                                <span class="px-2 py-0.5 rounded text-xs font-semibold ${item.category === 'CAL' ? 'bg-blue-100 text-blue-800' : (item.category === 'ASM' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800')}">
+                                    ${item.category}
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 text-center font-bold text-slate-700">${item.mp}</td>
+                            <td class="px-6 py-4 text-center font-bold text-blue-600">${item.onHand}</td>
+                            <td class="px-6 py-4 text-center font-bold text-amber-600">${item.iqcOk}</td>
+                            <td class="px-6 py-4 text-center font-bold text-emerald-600">${item.passed}</td>
+                            <td class="px-6 py-4">
+                                <span class="px-2.5 py-1 text-xs font-semibold rounded-md ${statusClass}">
+                                    ${item.status}
+                                </span>
+                            </td>
+                        </tr>
+                    `;
+                });
+            } else {
+                const item = data[0];
+                title.innerText = `No.${item.id} ${item.name} - 每台机台明细列表`;
+                countBadge.innerText = `需求: ${item.mp} 台 | 在手: ${item.onHand} 台 | IQC: ${item.iqcOk} 台 | 验证通过: ${item.passed} 台`;
+
+                thead.innerHTML = `
+                    <tr>
+                        <th class="px-5 py-3">机台 SN 编号</th>
+                        <th class="px-6 py-3">归属治具款名</th>
+                        <th class="px-4 py-3">类别</th>
+                        <th class="px-6 py-3">使用车间/工站</th>
+                        <th class="px-6 py-3 text-center">IQC 检验</th>
+                        <th class="px-6 py-3 text-center">验证状态 / Equivalence</th>
+                        <th class="px-6 py-3 text-center">验证结论</th>
+                    </tr>
+                `;
+
+                (item.units || []).forEach(unit => {
+                    const iqcBadge = unit.isIqcOk
+                        ? `<span class="px-2 py-0.5 text-xs bg-emerald-100 text-emerald-800 rounded font-semibold"><i class="fa-solid fa-check"></i> IQC一次通过</span>`
+                        : `<span class="px-2 py-0.5 text-xs bg-amber-100 text-amber-800 rounded font-semibold">IQC待处理</span>`;
+
+                    let equivBadge = `<span class="text-slate-400 text-xs">${unit.equiv}</span>`;
+                    if (unit.equiv === 'Y') {
+                        equivBadge = `<span class="px-2 py-0.5 text-xs bg-emerald-100 text-emerald-800 rounded font-semibold">Equivalence OK</span>`;
+                    } else if (unit.equiv === 'Golden') {
+                        equivBadge = `<span class="px-2 py-0.5 text-xs bg-indigo-100 text-indigo-800 rounded font-bold"><i class="fa-solid fa-gem text-indigo-600"></i> Golden标样</span>`;
+                    } else if (unit.equiv === 'N') {
+                        equivBadge = `<span class="px-2 py-0.5 text-xs bg-rose-100 text-rose-800 rounded font-bold">等效性未通过</span>`;
+                    }
+
+                    const valBadge = unit.isValidated
+                        ? `<span class="px-2.5 py-1 text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 rounded font-semibold"><i class="fa-solid fa-circle-check"></i> 验证通过</span>`
+                        : `<span class="px-2.5 py-1 text-xs bg-amber-50 text-amber-700 border border-amber-200 rounded font-semibold"><i class="fa-solid fa-clock"></i> ${unit.valStatus}</span>`;
+
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-slate-50 transition">
+                            <td class="px-5 py-4 font-mono font-bold text-slate-800 text-xs">${unit.sn}</td>
+                            <td class="px-6 py-4 font-semibold text-slate-700">${item.name}</td>
+                            <td class="px-4 py-4 text-xs font-semibold">${unit.category}</td>
+                            <td class="px-6 py-4 font-medium text-slate-700">${unit.location}</td>
+                            <td class="px-6 py-4 text-center">${iqcBadge}</td>
+                            <td class="px-6 py-4 text-center">${equivBadge}</td>
+                            <td class="px-6 py-4 text-center">${valBadge}</td>
+                        </tr>
+                    `;
+                });
+            }
+        }
+
+        function viewSingleFixture(id) {
+            const select = document.getElementById('table-fixture-filter');
+            if (select) {
+                select.value = id;
+                renderDashboard();
+            }
+        }
+
+        // ==================== 6. J&F SPARE PARTS 备品耗材模块 ====================
+        function toggleSpareFilter(onlyAlert) {
+            onlyShowAlertSpare = onlyAlert;
+            document.getElementById('filter-spare-all').className = onlyAlert 
+                ? "text-xs bg-slate-100 text-slate-700 hover:bg-slate-200 px-3 py-1.5 rounded-lg border border-slate-300 font-medium transition"
+                : "text-xs bg-slate-900 text-white px-3 py-1.5 rounded-lg font-medium transition";
+            document.getElementById('filter-spare-alert').className = onlyAlert
+                ? "text-xs bg-rose-600 text-white px-3 py-1.5 rounded-lg font-medium transition shadow-sm"
+                : "text-xs bg-slate-100 text-slate-700 hover:bg-slate-200 px-3 py-1.5 rounded-lg border border-slate-300 font-medium transition";
+            renderSpareTableOnly();
+        }
+
+        function renderSpareModule() {
+            const totalSkus = rawSpareData.length;
+            const totalOnHand = rawSpareData.reduce((s, d) => s + d.onHand, 0);
+            const alertCount = rawSpareData.filter(d => d.onHand < d.minStock).length;
+
+            document.getElementById('kpi-spare-skus').innerText = totalSkus;
+            document.getElementById('kpi-spare-warning').innerText = `${alertCount} 项`;
+            document.getElementById('kpi-spare-onhand-total').innerText = `${totalOnHand} pcs`;
+            document.getElementById('alert-btn-count').innerText = alertCount;
+
+            renderSpareTableOnly();
+
+            if (chartInstances.spareCompare) chartInstances.spareCompare.destroy();
+            if (chartInstances.spareVendor) chartInstances.spareVendor.destroy();
+
+            const ctx3 = document.getElementById('spareStockCompareChart').getContext('2d');
+            const targetParts = rawSpareData.slice(0, 7);
+            chartInstances.spareCompare = new Chart(ctx3, {
+                type: 'bar',
+                data: {
+                    labels: targetParts.map(d => d.name.substring(0, 10)),
+                    datasets: [
+                        { label: '安全库存 (Safety)', data: targetParts.map(d => d.minStock), backgroundColor: '#94a3b8' },
+                        { label: '当前在手 (On Hand)', data: targetParts.map(d => d.onHand), backgroundColor: targetParts.map(d => d.onHand < d.minStock ? '#f43f5e' : '#10b981') }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+
+            const ctx4 = document.getElementById('spareVendorChart').getContext('2d');
+            chartInstances.spareVendor = new Chart(ctx4, {
+                type: 'pie',
+                data: {
+                    labels: ['Thorlabs', 'BYD', 'Nextech', '零刻/Honeywell', '其它供应商'],
+                    datasets: [{
+                        data: [9, 2, 2, 2, 1],
+                        backgroundColor: ['#6366f1', '#10b981', '#f43f5e', '#3b82f6', '#f59e0b']
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+            });
+        }
+
+        function renderSpareTableOnly() {
+            const tbody = document.getElementById('spare-table-body');
+            tbody.innerHTML = '';
+
+            const list = onlyShowAlertSpare ? rawSpareData.filter(d => d.onHand < d.minStock) : rawSpareData;
+
+            list.forEach(item => {
+                const isShortage = item.onHand < item.minStock;
+                const rowClass = isShortage ? 'stock-alert-row font-medium' : 'hover:bg-slate-50';
+                
+                const statusBadge = isShortage 
+                    ? `<span class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-full bg-rose-200 text-rose-800"><i class="fa-solid fa-triangle-exclamation"></i> 低于安全库存</span>`
+                    : `<span class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-800"><i class="fa-solid fa-check"></i> 库存充足</span>`;
+
+                const onHandDisplay = isShortage
+                    ? `<span class="text-rose-600 font-bold">${item.onHand} pcs</span>`
+                    : `<span class="text-emerald-600 font-bold">${item.onHand} pcs</span>`;
+
+                tbody.innerHTML += `
+                    <tr class="${rowClass} transition">
+                        <td class="px-6 py-4 font-semibold text-slate-900">${item.name}</td>
+                        <td class="px-6 py-4">${item.vendor}</td>
+                        <td class="px-6 py-4 text-xs">${item.model}</td>
+                        <td class="px-6 py-4 font-mono text-xs text-slate-500">${item.pn}</td>
+                        <td class="px-6 py-4 font-semibold text-slate-700">${item.minStock} pcs</td>
+                        <td class="px-6 py-4">${onHandDisplay}</td>
+                        <td class="px-6 py-4">${statusBadge}</td>
+                        <td class="px-6 py-4 font-semibold text-slate-700">${item.address}</td>
+                    </tr>
+                `;
+            });
+        }
+    </script>
+</body>
+</html>
